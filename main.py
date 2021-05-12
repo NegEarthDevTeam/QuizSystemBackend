@@ -16,9 +16,12 @@ db = MongoEngine(app)
 
 app.secret_key = "quizSystemSecretKey"
 
+socketio = SocketIO(app, cors_allowed_origins='*')
+
 socketio = SocketIO(app)
 
 # create room is actually just a string generator that then initiates the quiz in the DB
+# check that the room code isn't currently in sure with any of the other active quizzes
 
 
 @socketio.event
@@ -72,4 +75,4 @@ def finishQuiz(data):
 
 
 if __name__ == '__main__':
-    socketio.run(app)
+    socketio.run(app, port=5001, debug=True)
