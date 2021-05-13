@@ -1,3 +1,5 @@
+global db
+from dbclasses import *
 from flask import *
 from flask_socketio import *
 from flask_mongoengine import *
@@ -15,9 +17,8 @@ app.config["MONGODB_SETTINGS"] = {
     "host": "localhost",
     "port": 27017
 }
-
-global db
 db = MongoEngine(app)
+
 
 app.secret_key = "quizSystemSecretKey"
 
@@ -35,8 +36,9 @@ def createRoom(data):
         if not logic.checkRoomExists(quizId):
             logic.registerRoomExists(quizId)
             print(f'room created with quiz ID: {quizId}')
-            send(f'ID {quizId}')
-            break
+            print(data)
+            emit(f'ID {quizId}')
+            return(f'ID {quizId}')
 
 
 # join room
@@ -46,7 +48,8 @@ def on_join(data):
     room = data['room']
     join_room(room)
     print('the join event was run')
-    send(f'{username} has entered the quizspace', to=room, )
+    send(f'{username} has entered the quizspace', to=room)
+    emit('notify')
 
 # exit room
 
@@ -88,25 +91,57 @@ def finishQuiz(data):
 # API ENDPOINTS #
 #################
 
+#test route
 @app.route('/sm')
 def sm():
     return('API is working')
 
-
-@app.route('create/hostUser', methods=['POST'])
+#creates host users
+@app.route('/create/hostUser', methods=['POST'])
 def createHostUser():
-    pass
+    requestData = request.get_json()
+    hostUser = HostUser(
+        firstName=requestData["firstName"],
+        lastName=requestData["lastName"],
+        email=requestData["email"],
+        passwordHash=requestData["passwordHash"],
+    )
+    hostUser.save()
+    return hostUser.to_json()
 
-
-@app.route('create/testUser', methods=['POST'])
+#creates test users
+@app.route('/create/testUser', methods=['POST'])
 def createTestUser():
-    pass
+    requestData = request.get_json()
+    testUser = TestUser(
+        email=requestData["email"],
+    )
+    testUser.save()
+    return testUser.to_json()
 
-
-@app.route('check/userType', methods=['GET'])
+#checks user types
+@app.route('/check/userType', methods=['GET'])
 def checkUserType():
-    pass
+    request_data = request.get_json()
+    email = request_data['email'].lower()
+    emailDomain = email.split("@", 1)[1]
+    testUser = TestUser.objects(email=email).first()
+    hostUser = HostUser.objects(email=email).first()
+    if emailDomain != "negearth.co.uk":
+        return ("email is not a NEGEARTH email", 400)
+    else:
+        if testUser and hostUser:
+            return ('Email is associated with both host and test user type', 400)
+        if not testUser and not hostUser:
+            return ('User not found')
+        if hostUser:
+            return ('hostUser')
+        if testUser:
+            return ('testUser')
 
 
+
+
+#runs server
 if __name__ == '__main__':
-    socketio.run(app, port=5001, debug=True)
+    socketio.run(app, port=5000, debug=True)
