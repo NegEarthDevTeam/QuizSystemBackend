@@ -50,6 +50,7 @@ def on_join(data):
     print('the join event was run')
     send(f'{username} has entered the quizspace', to=room)
     emit('notify')
+    return True
 
 # exit room
 
