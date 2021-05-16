@@ -226,7 +226,7 @@ def createTestUser():
 # checks user types
 
 
-@app.route('/check/userType', methods=['GET'])
+@app.route('/check/userType', methods=['POST'])
 def checkUserType():
     request_data = request.get_json()
     email = request_data['email'].lower()
