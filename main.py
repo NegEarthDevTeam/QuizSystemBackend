@@ -234,16 +234,16 @@ def checkUserType():
     testUser = TestUser.objects(email=email).first()
     hostUser = HostUser.objects(email=email).first()
     if emailDomain != "negearth.co.uk":
-        return ("email is not a NEGEARTH email", 400)
+        return make_response({"message":"Email is not of the correct type"}, 400)
     else:
         if testUser and hostUser:
-            return ('Email is associated with both host and test user type', 400)
+            return make_response({"message":"Email is associated with both host and test user type"}, 500)
         if not testUser and not hostUser:
-            return ('User not found')
+            return make_response({"message":"User not found"}, 400)
         if hostUser:
-            return ('hostUser')
+            return make_response({"user":"hostUser"}, 200)
         if testUser:
-            return ('testUser')
+            return make_response({"user":"testUser"}, 200)
 
 
 @app.route('/api/questions', methods=['GET'])
