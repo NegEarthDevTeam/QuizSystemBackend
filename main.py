@@ -1,16 +1,17 @@
-global db
-from dbclasses import *
-from flask import *
-from flask_socketio import *
-from flask_mongoengine import *
-import string
-import random
+from logging import error
+from os import name
 import logic
-import globals
+import random
+import string
+from flask_mongoengine import *
+from flask_socketio import *
+from flask import *
+import datetime
+#from dbclasses import HostUser, TestUser, Quizzes, Question
+global db
 
 app = Flask(__name__)
 
-globals.init()
 
 app.config["MONGODB_SETTINGS"] = {
     "db": "quizsystemdb",
@@ -26,6 +27,104 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 # create room is actually just a string generator that then initiates the quiz in the DB
 # check that the room code isn't currently in sure with any of the other active quizzes
+
+
+#####################
+# CLASSES FOR MONGO #
+#####################
+class HostUser(db.Document):
+    firstName = db.StringField()
+    lastName = db.StringField()
+    email = db.StringField()
+    passwordHash = db.StringField()
+    created = datetime.datetime.now()
+    lastEdit = datetime.datetime.now()
+
+    def to_json(self):
+        return {
+            '_id': str(self.pk),
+            'First Name': self.firstName,
+            'Last Name': self.lastName,
+            'Email': self.email,
+            'Creation Date': self.created,
+            'Edit Date': self.lastEdit
+        }
+
+
+class TestUser(db.Document):
+    email = db.StringField()
+    created = datetime.datetime.now()
+    lastEdit = datetime.datetime.now()
+    def to_json(self):
+        return {
+            '_id': str(self.pk),
+            'Email': self.email,
+            'Creation Date': self.created,
+            'Edit Date': self.lastEdit
+        }
+
+
+class Quizzes(db.Document):
+    questions = db.ListField()
+    hostId = db.StringField()
+    testUsersId = db.ListField()
+    timeDate = db.DateTimeField()
+    def to_json(self):
+        return{
+            '_id': str(self.pk),
+            'Questions': self.questions,
+            'Host ID': self.hostId,
+            'Test Users ID': self.testUsersId,
+            'Time + Date': self.timeDate
+        }
+
+
+class Question(db.Document):
+    category = db.StringField()
+    questionType = db.StringField()
+    answer = db.ListField()
+    poll = db.ListField()
+    title = db.StringField()
+    bodyMD = db.StringField()
+    videoURL = db.StringField()
+    imageURL = db.StringField()
+    
+    def to_json(self):
+        return{
+            '_id': str(self.pk),
+            'Category': self.category,
+            'Question Type': self.questionType,
+            'Answer': self.answer,
+            'Poll': self.poll,
+            'Title': self.title,
+            'Body MD': self.bodyMD,
+            'Image URL': self.imageURL,
+            'VideoURL': self.videoURL,
+        }
+
+
+class Categories(db.Document):
+    name = db.StringField()
+
+    def to_json(self):
+        return{
+            '_id' : str(self.pk),
+            'name' : self.name
+        }
+
+    def assocQuestions(self):
+        op = []
+        for question in Question.objects:
+            if question.category == self.name:
+                op.append(str(question.pk))
+        return op
+
+        
+
+# '' : self. ,
+####################
+# Socket IO Events #
+####################
 
 
 @socketio.event
@@ -50,6 +149,7 @@ def on_join(data):
     print('the join event was run')
     send(f'{username} has entered the quizspace', to=room)
     emit('notify')
+    return True
 
 # exit room
 
@@ -91,12 +191,14 @@ def finishQuiz(data):
 # API ENDPOINTS #
 #################
 
-#test route
+# test route
 @app.route('/sm')
 def sm():
     return('API is working')
 
-#creates host users
+# creates host users
+
+
 @app.route('/create/hostUser', methods=['POST'])
 def createHostUser():
     requestData = request.get_json()
@@ -109,7 +211,9 @@ def createHostUser():
     hostUser.save()
     return hostUser.to_json()
 
-#creates test users
+# creates test users
+
+
 @app.route('/create/testUser', methods=['POST'])
 def createTestUser():
     requestData = request.get_json()
@@ -119,7 +223,9 @@ def createTestUser():
     testUser.save()
     return testUser.to_json()
 
-#checks user types
+# checks user types
+
+
 @app.route('/check/userType', methods=['GET'])
 def checkUserType():
     request_data = request.get_json()
@@ -140,8 +246,142 @@ def checkUserType():
             return ('testUser')
 
 
+@app.route('/api/questions', methods=['GET'])
+def apiQuestionsGet():
+        
+        request_data = request.get_json()
+        catPres = False
+        try:
+            if request_data["category"] != "":
+                global category
+                category = request_data['category']
+                catPres = True
+        except TypeError:
+            print("requestBody was Empty")
+
+        op = {}
+        x = 0
+        if not catPres:
+            for question in Question.objects:
+                op[x] = question
+                x += 1
+        if catPres:
+            question = Question.objects(category=category).first()
+            # Error handling
+            if not question:
+                return jsonify({"error": question}), 404
+            else:
+                for question in Question.objects(category=category):
+                    op[x] = question.to_json()
+                    x += 1
+        return op
 
 
-#runs server
+# creates questions
+@app.route('/api/questions', methods=['POST'])
+def createQuestion():
+    requestData = request.get_json()
+    question = Question(
+        category=requestData["category"],
+        questionType=requestData["questionType"],
+        answer=requestData["answer"],
+        poll=requestData["poll"],
+        title=requestData["title"],
+        bodyMD=requestData["bodyMD"],
+        videoURL=requestData["videoURL"],
+        imageURL=requestData["imageURL"]
+    )
+    question.save()
+    return question.to_json()
+
+#Edits Question
+@app.route('/api/questions', methods=['PUT'])
+def editsQuestion():
+    requestData = request.get_json()
+    id = requestData["id"]
+    question = Question.objects(id=id).first()
+    try:
+        if "category" in requestData:
+            question.category = requestData["category"]
+        if "questionType" in requestData:
+            question.questionType = requestData["questionType"]
+        if "answer" in requestData:
+            question.answer = requestData["answer"]
+        if "poll" in requestData:
+            question.poll = requestData["poll"]
+        if "title" in requestData:
+            question.title = requestData["title"]
+        if "bodyMD" in requestData:
+            question.bodyMD = requestData["bodyMD"]
+        if "videoURL" in requestData:
+            question.videoURL = requestData["videoURL"]
+        if "imageURL" in requestData:
+            question.imageURL = requestData["imageURL"]
+        question.save()
+        return(question.to_json())
+    except Exception as e:
+        print(e)
+        return ("error", 400)
+
+@app.route('/api/questions', methods=["DELETE"])
+def deletesQuestions():
+    requestData = request.get_json()
+    id = requestData["id"]
+    question = Question.objects(id=id).first()
+    question.delete()
+    return ("success")
+
+
+@app.route('/api/categories', methods=["GET"])
+def getCategories():
+    op = {}
+    x = 0
+    for category in Categories.objects:
+        print("cat")
+        op[x] = category.to_json()
+        x += 1
+    return op
+
+@app.route('/api/categories', methods=["POST"])
+def postCategories():
+    requestData = request.get_json()
+    catg = Categories(
+        name = requestData['name']
+    )
+    catg.save()
+    return(catg.to_json())
+
+
+@app.route('/api/categories', methods=["PUT"])
+def putCategories():
+    requestData = request.get_json()
+    id = requestData["id"]
+    category = Categories.objects(id=id).first()
+    try:
+        category.name = requestData["name"]
+        category.save()
+        return(category.to_json())
+    except Exception as e:
+        print(e)
+        return ("error", 400)
+
+@app.route('/api/categories', methods=["DELETE"])
+def deletesCategories():
+    requestData = request.get_json()
+    id = requestData["id"]
+    migrateTo = requestData["migrateTo"]
+    category = Categories.objects(id=id).first()
+    if not category.assocQuestions():
+        category.delete()
+    else:
+        for questions in category.assocQuestions():
+            quessy = Question.objects(id=questions).first()
+            quessy.category = migrateTo
+            quessy.save()
+            category.delete()
+    return ("success")
+
+
+# runs server
 if __name__ == '__main__':
     socketio.run(app, port=5000, debug=True)

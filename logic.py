@@ -1,10 +1,11 @@
-import globals
+
+CURRENT_QUIZZES = {}
 
 def checkRoomExists(room):
-    if room in globals.CURRENT_QUIZZES:
+    if room in CURRENT_QUIZZES:
         return True
     else:
         return False
 
 def registerRoomExists(room):
-    globals.CURRENT_QUIZZES[room] = 'active'
+    CURRENT_QUIZZES[room] = 'active'
