@@ -319,12 +319,6 @@ def apiQuestionsGet():
                 global category
                 category = request_data['category']
                 catPres = True
-        except TypeError:
-            print("requestBody was Empty")
-            return(jsonify('BAD REQUEST'), 400)
-
-        else:
-            try:
                 op = {}
                 x = 0
                 if not catPres:
@@ -338,11 +332,14 @@ def apiQuestionsGet():
                         for question in Question.objects(category=category):
                             op[x] = question.to_json()
                             x += 1
-            except Exception:
-                print("BAD REQUEST")
-                return(jsonify('BAD REQUEST'), 400)
-            else:
-                return op
+        except TypeError:
+            print("requestBody was Empty")
+            return(jsonify('BAD REQUEST'), 400)
+        except Exception:
+            print("requestBody was Empty")
+            return(jsonify('BAD REQUEST'), 400)
+        else:
+            return(jsonify(op), 200)
 
 
 # creates questions
