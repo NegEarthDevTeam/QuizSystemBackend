@@ -132,7 +132,7 @@ class BadRequestError(Exception):
         pass
 
     def __str__(self):
-        return ('The request was bad', 400)
+        return ('The request was bad')
 
 class ResourceNotFound(Exception):
     def __init__(self, **kwargs):
@@ -140,27 +140,27 @@ class ResourceNotFound(Exception):
 
     def __str__(self):
         if self.resourceType == 'hostUser':
-            return ('Host user not found', 404)
+            return ('Host user not found')
         if self.resourceType == 'testUser':
-            return('Test user not found', 404)
+            return('Test user not found')
         if self.resourceType == 'user':
-            return('User type not found')
+            return('User not found')
         if self.resourceType == 'quiz':
-            return('Quiz not found', 404)
+            return('Quiz not found')
         if self.resourceType == 'question':
-            return('Question not found', 404)
+            return('Question not found')
         if self.resourceType == 'category':
-            return('Category not found', 404)
+            return('Category not found')
 
 class NotNegResource(Exception):
-    def __init__(self, *args):
-        if args:
-            self.message = args[0]
+    def __init__(self, message):
+        if message:
+            self.message = message
         else:
             pass
 
     def __str__(self):
-        return('You have tried to use a non NEG resource', 403)
+        return('You have tried to use a non NEG resource')
             
 
 
@@ -261,11 +261,11 @@ def createHostUser():
             passwordHash=requestData["passwordHash"],
         )
         hostUser.save()
-    except Exception as e:
-        print(f'There was an error in this request: {e}')
-        return('BAD REQUEST', 400)
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
     else:
-        return hostUser.to_json()
+        return (jsonify(hostUser.to_json()))
 
 # creates test users
 
@@ -278,9 +278,9 @@ def createTestUser():
             email=requestData["email"],
         )
         testUser.save()
-    except Exception as e:
-        print(f'There was an error in this request: {e}')
-        return('BAD REQUEST', 400)
+    except Exception:
+        print(f'There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
     else:
         return testUser.to_json()
 
@@ -298,18 +298,15 @@ def checkUserType():
         if emailDomain != "negearth.co.uk":
             raise NotNegResource('Please use a NEG Earth Email address')
         if not testUser and not hostUser:
-                raise ResourceNotFound(resourceType = 'user')
-    except Exception as e:
-        # TODO This is where I got to
-        else:
-            if testUser and hostUser:
-                return ('Email is associated with both host and test user type', 400)
-            if not testUser and not hostUser:
-                return ('User not found', 404)
-            if hostUser:
-                return ('hostUser')
-            if testUser:
-                return ('testUser')
+            raise ResourceNotFound(resourceType = 'user')
+    except Exception:
+        print(f'There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:
+        if hostUser:
+            return jsonify('hostUser')
+        if testUser:
+            return jsonify('testUser')
 
 
 @app.route('/api/questions', methods=['GET'])
@@ -324,41 +321,51 @@ def apiQuestionsGet():
                 catPres = True
         except TypeError:
             print("requestBody was Empty")
+            return(jsonify('BAD REQUEST'), 400)
 
-        op = {}
-        x = 0
-        if not catPres:
-            for question in Question.objects:
-                op[x] = question
-                x += 1
-        if catPres:
-            question = Question.objects(category=category).first()
-            # Error handling
-            if not question:
-                return jsonify({"error": question}), 404
+        else:
+            try:
+                op = {}
+                x = 0
+                if not catPres:
+                    for question in Question.objects:
+                        op[x] = question
+                        x += 1
+                if catPres:
+                    question = Question.objects(category=category).first()
+                    # Error handling
+                    if question:
+                        for question in Question.objects(category=category):
+                            op[x] = question.to_json()
+                            x += 1
+            except Exception:
+                print("BAD REQUEST")
+                return(jsonify('BAD REQUEST'), 400)
             else:
-                for question in Question.objects(category=category):
-                    op[x] = question.to_json()
-                    x += 1
-        return op
+                return op
 
 
 # creates questions
 @app.route('/api/questions', methods=['POST'])
 def createQuestion():
     requestData = request.get_json()
-    question = Question(
-        category=requestData["category"],
-        questionType=requestData["questionType"],
-        answer=requestData["answer"],
-        poll=requestData["poll"],
-        title=requestData["title"],
-        bodyMD=requestData["bodyMD"],
-        videoURL=requestData["videoURL"],
-        imageURL=requestData["imageURL"]
-    )
-    question.save()
-    return question.to_json()
+    try:
+        question = Question(
+            category=requestData["category"],
+            questionType=requestData["questionType"],
+            answer=requestData["answer"],
+            poll=requestData["poll"],
+            title=requestData["title"],
+            bodyMD=requestData["bodyMD"],
+            videoURL=requestData["videoURL"],
+            imageURL=requestData["imageURL"]
+        )
+        question.save()
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:
+        return question.to_json()
 
 #Edits Question
 @app.route('/api/questions', methods=['PUT'])
@@ -384,18 +391,29 @@ def editsQuestion():
         if "imageURL" in requestData:
             question.imageURL = requestData["imageURL"]
         question.save()
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:
         return(question.to_json())
-    except Exception as e:
-        print(e)
-        return ("error", 400)
 
 @app.route('/api/questions', methods=["DELETE"])
 def deletesQuestions():
-    requestData = request.get_json()
-    id = requestData["id"]
-    question = Question.objects(id=id).first()
-    question.delete()
-    return ("success")
+    try:
+        requestData = request.get_json()
+        id = requestData["id"]
+        question = Question.objects(id=id).first()
+        if not question:
+            raise ResourceNotFound(resourceType = 'question')
+        question.delete()
+    except ResourceNotFound:
+        print('Question Not Found')
+        return(jsonify(f'Question with ID {id} does not exist'), 404)
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:        
+        return (jsonify("success"))
 
 
 @app.route('/api/categories', methods=["GET"])
@@ -403,7 +421,6 @@ def getCategories():
     op = {}
     x = 0
     for category in Categories.objects:
-        print("cat")
         op[x] = category.to_json()
         x += 1
     return op
@@ -411,11 +428,16 @@ def getCategories():
 @app.route('/api/categories', methods=["POST"])
 def postCategories():
     requestData = request.get_json()
-    catg = Categories(
-        name = requestData['name']
-    )
-    catg.save()
-    return(catg.to_json())
+    try:
+        catg = Categories(
+            name = requestData['name']
+        )
+        catg.save()
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:
+        return(jsonify(catg.to_json()))
 
 
 @app.route('/api/categories', methods=["PUT"])
@@ -426,26 +448,33 @@ def putCategories():
     try:
         category.name = requestData["name"]
         category.save()
-        return(category.to_json())
-    except Exception as e:
-        print(e)
+    except Exception:
         return ("error", 400)
+    else:
+        return(jsonify(category.to_json()))
 
 @app.route('/api/categories', methods=["DELETE"])
 def deletesCategories():
     requestData = request.get_json()
-    id = requestData["id"]
-    migrateTo = requestData["migrateTo"]
-    category = Categories.objects(id=id).first()
-    if not category.assocQuestions():
-        category.delete()
-    else:
-        for questions in category.assocQuestions():
-            quessy = Question.objects(id=questions).first()
-            quessy.category = migrateTo
-            quessy.save()
+    try:
+        id = requestData["id"]
+        migrateTo = requestData["migrateTo"]
+        category = Categories.objects(id=id).first()
+        if not category:
+            raise ResourceNotFound(resourceType = 'category')
+        if not category.assocQuestions():
             category.delete()
-    return ("success")
+        else:
+            for questions in category.assocQuestions():
+                quessy = Question.objects(id=questions).first()
+                quessy.category = migrateTo
+                quessy.save()
+                category.delete()
+    except Exception:
+        print('There was an error in this request')
+        return (jsonify('BAD REQUEST'), 400)
+    else:
+        return(jsonify("success"))
 
 @app.route('/exception/badRequestError')
 def testBadRequestError():
