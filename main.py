@@ -321,20 +321,24 @@ def apiQuestionsGet():
                 catPres = True
                 op = {}
                 x = 0
-                if not catPres:
-                    for question in Question.objects:
-                        op[x] = question
-                        x += 1
-                if catPres:
-                    question = Question.objects(category=category).first()
-                    # Error handling
-                    if question:
-                        for question in Question.objects(category=category):
-                            op[x] = question.to_json()
-                            x += 1
         except TypeError:
             print("requestBody was Empty")
             return(jsonify('BAD REQUEST'), 400)
+        except Exception:
+            print("requestBody was Empty")
+            return(jsonify('BAD REQUEST'), 400)
+        try:
+            if not catPres:
+                for question in Question.objects:
+                    op[x] = question
+                    x += 1
+            if catPres:
+                question = Question.objects(category=category).first()
+                # Error handling
+                if question:
+                    for question in Question.objects(category=category):
+                        op[x] = question.to_json()
+                        x += 1
         except Exception:
             print("requestBody was Empty")
             return(jsonify('BAD REQUEST'), 400)
