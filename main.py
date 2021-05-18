@@ -1,4 +1,4 @@
-from logging import error
+from logging import error, exception
 from os import name
 import logic
 import random
@@ -41,14 +41,14 @@ class HostUser(db.Document):
     lastEdit = datetime.datetime.now()
 
     def to_json(self):
-        return {
+        return jsonify({
             '_id': str(self.pk),
             'First Name': self.firstName,
             'Last Name': self.lastName,
             'Email': self.email,
             'Creation Date': self.created,
             'Edit Date': self.lastEdit
-        }
+        })
 
 
 class TestUser(db.Document):
@@ -56,12 +56,12 @@ class TestUser(db.Document):
     created = datetime.datetime.now()
     lastEdit = datetime.datetime.now()
     def to_json(self):
-        return {
+        return jsonify({
             '_id': str(self.pk),
             'Email': self.email,
             'Creation Date': self.created,
             'Edit Date': self.lastEdit
-        }
+        })
 
 
 class Quizzes(db.Document):
@@ -70,13 +70,13 @@ class Quizzes(db.Document):
     testUsersId = db.ListField()
     timeDate = db.DateTimeField()
     def to_json(self):
-        return{
+        return jsonify({
             '_id': str(self.pk),
             'Questions': self.questions,
             'Host ID': self.hostId,
             'Test Users ID': self.testUsersId,
             'Time + Date': self.timeDate
-        }
+        })
 
 
 class Question(db.Document):
@@ -90,7 +90,7 @@ class Question(db.Document):
     imageURL = db.StringField()
     
     def to_json(self):
-        return{
+        return josnify({
             '_id': str(self.pk),
             'Category': self.category,
             'Question Type': self.questionType,
@@ -100,17 +100,17 @@ class Question(db.Document):
             'Body MD': self.bodyMD,
             'Image URL': self.imageURL,
             'VideoURL': self.videoURL,
-        }
+        })
 
 
 class Categories(db.Document):
     name = db.StringField()
 
     def to_json(self):
-        return{
+        return jsonify({
             '_id' : str(self.pk),
             'name' : self.name
-        }
+        })
 
     def assocQuestions(self):
         op = []
@@ -122,6 +122,57 @@ class Categories(db.Document):
         
 
 # '' : self. ,
+
+#################
+# Custom Errors #
+#################
+
+class BadRequestError(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return ('The request was bad', 400)
+
+class ResourceNotFound(Exception):
+    def __init__(self, **kwargs):
+        self.resourceType = kwargs['resourceType']
+
+    def __str__(self):
+        if self.resourceType == 'hostUser':
+            return ('Host user not found', 404)
+        if self.resourceType == 'testUser':
+            return('Test user not found', 404)
+        if self.resourceType == 'user':
+            return('User type not found')
+        if self.resourceType == 'quiz':
+            return('Quiz not found', 404)
+        if self.resourceType == 'question':
+            return('Question not found', 404)
+        if self.resourceType == 'category':
+            return('Category not found', 404)
+
+class NotNegResource(Exception):
+    def __init__(self, *args):
+        if args:
+            self.message = args[0]
+        else:
+            pass
+
+    def __str__(self):
+        return('You have tried to use a non NEG resource', 403)
+            
+
+
+
+# raise MyCustomError
+
+#raise MyCustomError('We have a problem')
+
+
+
+
+
 ####################
 # Socket IO Events #
 ####################
@@ -194,7 +245,7 @@ def finishQuiz(data):
 # test route
 @app.route('/sm')
 def sm():
-    return('API is working')
+    return('API is working', 200)
 
 # creates host users
 
@@ -202,48 +253,63 @@ def sm():
 @app.route('/create/hostUser', methods=['POST'])
 def createHostUser():
     requestData = request.get_json()
-    hostUser = HostUser(
-        firstName=requestData["firstName"],
-        lastName=requestData["lastName"],
-        email=requestData["email"],
-        passwordHash=requestData["passwordHash"],
-    )
-    hostUser.save()
-    return hostUser.to_json()
+    try:
+        hostUser = HostUser(
+            firstName=requestData["firstName"],
+            lastName=requestData["lastName"],
+            email=requestData["email"],
+            passwordHash=requestData["passwordHash"],
+        )
+        hostUser.save()
+    except Exception as e:
+        print(f'There was an error in this request: {e}')
+        return('BAD REQUEST', 400)
+    else:
+        return hostUser.to_json()
 
 # creates test users
 
 
 @app.route('/create/testUser', methods=['POST'])
 def createTestUser():
-    requestData = request.get_json()
-    testUser = TestUser(
-        email=requestData["email"],
-    )
-    testUser.save()
-    return testUser.to_json()
+    try:
+        requestData = request.get_json()
+        testUser = TestUser(
+            email=requestData["email"],
+        )
+        testUser.save()
+    except Exception as e:
+        print(f'There was an error in this request: {e}')
+        return('BAD REQUEST', 400)
+    else:
+        return testUser.to_json()
 
 # checks user types
 
 
-@app.route('/check/userType', methods=['GET'])
+@app.route('/check/userType', methods=['POST'])
 def checkUserType():
     request_data = request.get_json()
     email = request_data['email'].lower()
     emailDomain = email.split("@", 1)[1]
-    testUser = TestUser.objects(email=email).first()
-    hostUser = HostUser.objects(email=email).first()
-    if emailDomain != "negearth.co.uk":
-        return ("email is not a NEGEARTH email", 400)
-    else:
-        if testUser and hostUser:
-            return ('Email is associated with both host and test user type', 400)
+    try:
+        testUser = TestUser.objects(email=email).first()
+        hostUser = HostUser.objects(email=email).first()
+        if emailDomain != "negearth.co.uk":
+            raise NotNegResource('Please use a NEG Earth Email address')
         if not testUser and not hostUser:
-            return ('User not found')
-        if hostUser:
-            return ('hostUser')
-        if testUser:
-            return ('testUser')
+                raise ResourceNotFound(resourceType = 'user')
+    except Exception as e:
+        # TODO This is where I got to
+        else:
+            if testUser and hostUser:
+                return ('Email is associated with both host and test user type', 400)
+            if not testUser and not hostUser:
+                return ('User not found', 404)
+            if hostUser:
+                return ('hostUser')
+            if testUser:
+                return ('testUser')
 
 
 @app.route('/api/questions', methods=['GET'])
@@ -380,6 +446,10 @@ def deletesCategories():
             quessy.save()
             category.delete()
     return ("success")
+
+@app.route('/exception/badRequestError')
+def testBadRequestError():
+    raise BadRequestError() 
 
 
 # runs server
