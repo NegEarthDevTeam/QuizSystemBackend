@@ -1,5 +1,6 @@
 from logging import error, exception
 from os import name
+from warnings import catch_warnings
 import logic
 import random
 import string
@@ -416,10 +417,7 @@ def deletesQuestions():
 
 @app.route('/api/categories', methods=["GET"])
 def getCategories():
-    data = []
-    for category in Categories.objects:
-        data.append(category.to_json())
-    return  (jsonify(data),200)
+    return(jsonify(Categories.objects), 200)
 
 @app.route('/api/categories', methods=["POST"])
 def postCategories():
