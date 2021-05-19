@@ -416,12 +416,10 @@ def deletesQuestions():
 
 @app.route('/api/categories', methods=["GET"])
 def getCategories():
-    op = {}
-    x = 0
+    data = []
     for category in Categories.objects:
-        op[x] = category.to_json()
-        x += 1
-    return op
+        data.append(category.to_json())
+    return  (jsonify(data),200)
 
 @app.route('/api/categories', methods=["POST"])
 def postCategories():
@@ -477,7 +475,6 @@ def deletesCategories():
 @app.route('/exception/badRequestError')
 def testBadRequestError():
     raise BadRequestError() 
-
 
 # runs server
 if __name__ == '__main__':
