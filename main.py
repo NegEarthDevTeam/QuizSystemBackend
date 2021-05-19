@@ -286,64 +286,61 @@ def createTestUser():
 
 # checks user types
 
-
 @app.route('/check/userType', methods=['POST'])
 def checkUserType():
     request_data = request.get_json()
+    if request_data == None:
+        return make_response({"error":"Nothing sent."}, 400)
+
     email = request_data['email'].lower()
+    if not('@' in email):
+        return make_response({"error":"Not a valid email"}, 400)
+
     emailDomain = email.split("@", 1)[1]
-    try:
-        testUser = TestUser.objects(email=email).first()
-        hostUser = HostUser.objects(email=email).first()
-        if emailDomain != "negearth.co.uk":
-            raise NotNegResource('Please use a NEG Earth Email address')
-        if not testUser and not hostUser:
-            raise ResourceNotFound(resourceType = 'user')
-    except Exception:
-        print(f'There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
-    else:
-        if hostUser:
-            return jsonify('hostUser')
-        if testUser:
-            return jsonify('testUser')
+
+    if emailDomain != "negearth.co.uk":
+        return make_response({"error":"Email is not of the correct type"}, 400)
+
+    testUser = TestUser.objects(email=email).first()
+    hostUser = HostUser.objects(email=email).first()
+
+    if testUser and hostUser:
+        return make_response({"error":"Email is associated with both host and test user type"}, 500)
+    if hostUser:
+        return make_response({"user":"hostUser"}, 200)
+    if testUser:
+        return make_response({"user":"testUser"}, 200)
+    return make_response({"error":"User not found"}, 400)
+
 
 
 @app.route('/api/questions', methods=['GET'])
 def apiQuestionsGet():
-        
-        request_data = request.get_json()
-        catPres = False
-        try:
-            if request_data["category"] != "":
-                global category
-                category = request_data['category']
-                catPres = True
-                op = {}
-                x = 0
-        except TypeError:
-            print("requestBody was Empty")
-            return(jsonify('BAD REQUEST'), 400)
-        except Exception:
-            print("requestBody was Empty")
-            return(jsonify('BAD REQUEST'), 400)
-        try:
-            if not catPres:
-                for question in Question.objects:
-                    op[x] = question
-                    x += 1
-            if catPres:
-                question = Question.objects(category=category).first()
-                # Error handling
-                if question:
-                    for question in Question.objects(category=category):
-                        op[x] = question.to_json()
-                        x += 1
-        except Exception:
-            print("requestBody was Empty")
-            return(jsonify('BAD REQUEST'), 400)
+    getID = request.args.get("id")
+
+    request_data = request.get_json()
+    catPres, data = False, []
+
+    if request_data != None:
+        catPres = True if "category" in request_data else False
+
+    if getID:
+        res = Question.objects(id=getID).first()
+        if not res:
+            return make_response({"error": res}, 404)
         else:
-            return(jsonify(op), 200)
+            return make_response(res.to_json(), 200)
+
+    if not catPres:
+        return (jsonify(Question.objects), 200)
+
+    cat = request_data["category"]
+    question = Question.objects(category=cat).first()
+
+    if not question:
+        return make_response({"error":question}, 404)
+
+    return (jsonify(Question.objects(category=cat)), 200)
 
 
 # creates questions
