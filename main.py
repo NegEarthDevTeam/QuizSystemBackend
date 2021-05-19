@@ -248,33 +248,38 @@ def checkUserType():
 
 @app.route('/api/questions', methods=['GET'])
 def apiQuestionsGet():
-        
-        request_data = request.get_json()
-        catPres = False
-        try:
-            if request_data["category"] != "":
-                global category
-                category = request_data['category']
-                catPres = True
-        except TypeError:
-            print("requestBody was Empty")
+    getID = request.args.get("id")
 
-        op = {}
-        x = 0
-        if not catPres:
-            for question in Question.objects:
-                op[x] = question
+    request_data = request.get_json()
+    #catPres = "category" in request_data
+    catPres = False
+
+    if request_data != None:
+        catPres = True if "category" in request_data else False
+            
+    op = {}
+
+    if getID:
+        res = Question.objects(id=getID).first()
+        if not res:
+            return jsonify({"error": res}), 404
+        else:
+            return res.to_json()
+    x = 0
+    if not catPres:
+        for question in Question.objects:
+            op[x] = question
+            x += 1
+    if catPres:
+        question = Question.objects(category=request_data["category"]).first()
+        # Error handling
+        if not question:
+            return jsonify({"error": question}), 404
+        else:
+            for question in Question.objects(category=category):
+                op[x] = question.to_json()
                 x += 1
-        if catPres:
-            question = Question.objects(category=category).first()
-            # Error handling
-            if not question:
-                return jsonify({"error": question}), 404
-            else:
-                for question in Question.objects(category=category):
-                    op[x] = question.to_json()
-                    x += 1
-        return op
+    return op
 
 
 # creates questions
@@ -285,7 +290,7 @@ def createQuestion():
         category=requestData["category"],
         questionType=requestData["questionType"],
         answer=requestData["answer"],
-        poll=requestData["poll"],
+        poll=requestData["poll"] if "poll" in requestData else [], 
         title=requestData["title"],
         bodyMD=requestData["bodyMD"],
         videoURL=requestData["videoURL"],
@@ -327,9 +332,13 @@ def editsQuestion():
 def deletesQuestions():
     requestData = request.get_json()
     id = requestData["id"]
-    question = Question.objects(id=id).first()
-    question.delete()
-    return ("success")
+    try:
+        question = Question.objects(id=id).first()
+        question.delete()
+        return make_response({"message":"Success"}, 200)
+    except Exception as e:
+        print(e)
+        return make_response({"message":"Error"}, 400)
 
 
 @app.route('/api/categories', methods=["GET"])
