@@ -229,17 +229,19 @@ def createTestUser():
 @app.route('/check/userType', methods=['POST'])
 def checkUserType():
     request_data = request.get_json()
+    if request_data == None:
+        return make_response({"error":"Nothing sent."}, 400)
     email = request_data['email'].lower()
     emailDomain = email.split("@", 1)[1]
     testUser = TestUser.objects(email=email).first()
     hostUser = HostUser.objects(email=email).first()
     if emailDomain != "negearth.co.uk":
-        return make_response({"message":"Email is not of the correct type"}, 400)
+        return make_response({"error":"Email is not of the correct type"}, 400)
     else:
         if testUser and hostUser:
-            return make_response({"message":"Email is associated with both host and test user type"}, 500)
+            return make_response({"error":"Email is associated with both host and test user type"}, 500)
         if not testUser and not hostUser:
-            return make_response({"message":"User not found"}, 400)
+            return make_response({"error":"User not found"}, 400)
         if hostUser:
             return make_response({"user":"hostUser"}, 200)
         if testUser:
@@ -252,40 +254,39 @@ def apiQuestionsGet():
 
     request_data = request.get_json()
     #catPres = "category" in request_data
-    catPres = False
+    catPres, data = False, []
 
     if request_data != None:
         catPres = True if "category" in request_data else False
-            
-    op = {}
 
     if getID:
         res = Question.objects(id=getID).first()
         if not res:
-            return jsonify({"error": res}), 404
+            return make_response({"error": res}, 404)
         else:
-            return res.to_json()
-    x = 0
+            return make_response(res.to_json(), 200)
+
     if not catPres:
         for question in Question.objects:
-            op[x] = question
-            x += 1
+            data.append(question.to_json())
     if catPres:
-        question = Question.objects(category=request_data["category"]).first()
+        cat = request_data["category"]
+        question = Question.objects(category=cat).first()
         # Error handling
         if not question:
-            return jsonify({"error": question}), 404
+            return make_response({"error":question}, 404)
         else:
-            for question in Question.objects(category=category):
-                op[x] = question.to_json()
-                x += 1
-    return op
+            for question in Question.objects(category=cat):
+                data.append(question.to_json())
+    return make_response(jsonify(data), 200)
 
 
 # creates questions
 @app.route('/api/questions', methods=['POST'])
 def createQuestion():
     requestData = request.get_json()
+    if requestData == None:
+        return make_response({"error":"Nothing in body"}, 400)
     question = Question(
         category=requestData["category"],
         questionType=requestData["questionType"],
@@ -297,12 +298,14 @@ def createQuestion():
         imageURL=requestData["imageURL"]
     )
     question.save()
-    return question.to_json()
+    return make_response({question.to_json()}, 200)
 
 #Edits Question
 @app.route('/api/questions', methods=['PUT'])
 def editsQuestion():
     requestData = request.get_json()
+    if requestData == None:
+        return make_response({"error":"Nothing in body"}, 400)
     id = requestData["id"]
     question = Question.objects(id=id).first()
     try:
@@ -323,7 +326,7 @@ def editsQuestion():
         if "imageURL" in requestData:
             question.imageURL = requestData["imageURL"]
         question.save()
-        return(question.to_json())
+        return make_response({question.to_json()}, 200)
     except Exception as e:
         print(e)
         return ("error", 400)
