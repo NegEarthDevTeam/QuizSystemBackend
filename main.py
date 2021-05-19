@@ -137,7 +137,7 @@ def createRoom(data):
             print(f'room created with quiz ID: {quizId}')
             print(data)
             emit(f'ID {quizId}')
-            return(f'ID {quizId}')
+            return(f'{quizId}')
 
 
 # join room
@@ -146,9 +146,8 @@ def on_join(data):
     username = data['username']
     room = data['room']
     join_room(room)
-    print('the join event was run')
-    send(f'{username} has entered the quizspace', to=room)
-    emit('notify')
+    print(f'{username} joined a room - has been assigned the room {room}')
+    emit('notify',{"message":f'{username} has entered the quizspace',"user":username,"notificationType":"user_joined_room"},to=room)
     return True
 
 # exit room
@@ -231,21 +230,30 @@ def checkUserType():
     request_data = request.get_json()
     if request_data == None:
         return make_response({"error":"Nothing sent."}, 400)
+
     email = request_data['email'].lower()
+    if not('@' in email):
+        return make_response({"error":"Not a valid email"}, 400)
+
     emailDomain = email.split("@", 1)[1]
-    testUser = TestUser.objects(email=email).first()
-    hostUser = HostUser.objects(email=email).first()
+
     if emailDomain != "negearth.co.uk":
         return make_response({"error":"Email is not of the correct type"}, 400)
-    else:
-        if testUser and hostUser:
-            return make_response({"error":"Email is associated with both host and test user type"}, 500)
-        if not testUser and not hostUser:
-            return make_response({"error":"User not found"}, 400)
-        if hostUser:
-            return make_response({"user":"hostUser"}, 200)
-        if testUser:
-            return make_response({"user":"testUser"}, 200)
+
+    testUser = TestUser.objects(email=email).first()
+    hostUser = HostUser.objects(email=email).first()
+
+    if testUser and hostUser:
+        return make_response({"error":"Email is associated with both host and test user type"}, 500)
+
+
+    if hostUser:
+        return make_response({"user":"hostUser"}, 200)
+
+    if testUser:
+        return make_response({"user":"testUser"}, 200)
+
+    return make_response({"error":"User not found"}, 400)
 
 
 @app.route('/api/questions', methods=['GET'])
@@ -267,18 +275,20 @@ def apiQuestionsGet():
             return make_response(res.to_json(), 200)
 
     if not catPres:
+        return (jsonify(Question.objects),200)
+
         for question in Question.objects:
             data.append(question.to_json())
-    if catPres:
-        cat = request_data["category"]
-        question = Question.objects(category=cat).first()
-        # Error handling
-        if not question:
-            return make_response({"error":question}, 404)
-        else:
-            for question in Question.objects(category=cat):
-                data.append(question.to_json())
-    return make_response(jsonify(data), 200)
+        return (jsonify(data), 200)
+
+    cat = request_data["category"]
+    question = Question.objects(category=cat).first()
+    if not question:
+        return make_response({"error":question}, 404)
+    else:
+        for question in Question.objects(category=cat):
+            data.append(question.to_json())
+    return (jsonify(data), 200)
 
 
 # creates questions
@@ -298,7 +308,7 @@ def createQuestion():
         imageURL=requestData["imageURL"]
     )
     question.save()
-    return make_response({question.to_json()}, 200)
+    return (jsonify(question), 200)
 
 #Edits Question
 @app.route('/api/questions', methods=['PUT'])
@@ -326,7 +336,7 @@ def editsQuestion():
         if "imageURL" in requestData:
             question.imageURL = requestData["imageURL"]
         question.save()
-        return make_response({question.to_json()}, 200)
+        return (jsonify(question), 200)
     except Exception as e:
         print(e)
         return ("error", 400)
@@ -346,13 +356,10 @@ def deletesQuestions():
 
 @app.route('/api/categories', methods=["GET"])
 def getCategories():
-    op = {}
-    x = 0
+    data = []
     for category in Categories.objects:
-        print("cat")
-        op[x] = category.to_json()
-        x += 1
-    return op
+        data.append(category.to_json())
+    return (jsonify(data),200)
 
 @app.route('/api/categories', methods=["POST"])
 def postCategories():
