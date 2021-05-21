@@ -15,7 +15,6 @@ from flask_login import (
     logout_user,
     login_required,
 )
-#from dbclasses import HostUser, TestUser, Quizzes, Question
 global db
 
 app = Flask(__name__)
@@ -38,7 +37,7 @@ app.secret_key = "quizSystemSecretKey"
 socketio = SocketIO(app, cors_allowed_origins='*')
 
 # create room is actually just a string generator that then initiates the quiz in the DB
-# check that the room code isn't currently in sure with any of the other active quizzes
+# check that the room code isn't currently in sure with any of the other active quizes
 
 
 #####################
@@ -80,6 +79,7 @@ class TestUser(db.Document):
     email = db.StringField()
     created = datetime.datetime.now()
     lastEdit = datetime.datetime.now()
+
     def to_json(self):
         return jsonify({
             '_id': str(self.pk),
@@ -90,17 +90,24 @@ class TestUser(db.Document):
 
 
 class Quizzes(db.Document):
+    roomId = db.StringField()
+    allConnectedUsers = db.ListField()
+    dateTime = db.DateTimeField()
+    quizCompletedSuccessfully = db.StringField()
     questions = db.ListField()
-    usersId = db.ListField()
-    timeDate = db.DateTimeField()
-    timeLimit = db.StringField()
+    timeLimit = db.IntField()
+    activeRoomId = db.StringField()
+
     def to_json(self):
         return jsonify({
             '_id': str(self.pk),
+            'Room ID': self.roomId,
+            'All Time Connected Users': self.allConnectedUsers,
+            'Date and Time of Creation': self.dateTime,
+            'Quiz Completed Successfully': self.quizCompletedSuccessfully,
             'Questions': self.questions,
-            'Users IDs': self.usersId,
-            'Time + Date': self.timeDate,
-            'Time Limit' : self.timeLimit
+            'Time Limit': self.timeLimit,
+            'Active Room Object Id': self.activeRoomId
         })
 
 
@@ -113,7 +120,7 @@ class Question(db.Document):
     bodyMD = db.StringField()
     videoURL = db.StringField()
     imageURL = db.StringField()
-    
+
     def to_json(self):
         return jsonify({
             '_id': str(self.pk),
@@ -133,8 +140,8 @@ class Categories(db.Document):
 
     def to_json(self):
         return jsonify({
-            '_id' : str(self.pk),
-            'name' : self.name
+            '_id': str(self.pk),
+            'name': self.name
         })
 
     def assocQuestions(self):
@@ -144,21 +151,48 @@ class Categories(db.Document):
                 op.append(str(question.pk))
         return op
 
+
 class ActiveRooms(db.Document):
     roomId = db.StringField()
     connectedUserId = db.ListField()
+    allConnectedUsers = db.ListField()
     dateTime = db.DateTimeField()
     quizStarted = db.StringField()
+    questions = db.ListField()
+    timeLimit = db.IntField()
+    currentQuestion = db.StringField()
 
     def to_json(self):
         return jsonify({
-            'Room ID' : self.roomId,
-            'Connected User IDs' : self.connectedUserId,
-            'Date and Time of Creation' : self.dateTime,
-            'Quiz Started' : self.quizStarted
+            '_id': str(self.pk),
+            'Room ID': self.roomId,
+            'Connected User IDs': self.connectedUserId,
+            'All Time Connected Users': self.allConnectedUsers,
+            'Date and Time of Creation': self.dateTime,
+            'Questions': self.questions,
+            'Time Limit': self.timeLimit,
+            'Quiz Started': self.quizStarted,
+            'Current Question': self.currentQuestion
         })
 
-        
+
+class Quenswers(db.Document):
+    userId = db.StringField()
+    questionId = db.StringField()
+    answer = db.StringField()
+    dateTime = db.DateTimeField()
+    quizEnvId = db.StringField()
+
+    def to_json(self):
+        return jsonify({
+            '_id': str(self.pk),
+            'User ID': self.userId,
+            'Question ID': self.questionId,
+            'Answer': self.answer,
+            'Date Time': self.dateTime,
+            'Quiz Environment ID': self.quizEnvId
+        })
+
 
 # '' : self. ,
 
@@ -172,6 +206,7 @@ class BadRequestError(Exception):
 
     def __str__(self):
         return ('The request was bad')
+
 
 class ResourceNotFound(Exception):
     def __init__(self, **kwargs):
@@ -191,6 +226,7 @@ class ResourceNotFound(Exception):
         if self.resourceType == 'category':
             return('Category not found')
 
+
 class NotNegResource(Exception):
     def __init__(self, message):
         if message:
@@ -205,12 +241,15 @@ class NotNegResource(Exception):
 # Authentication Endpoints #
 ############################
 
+
 @login_manager.user_loader
 def loaduser(id):
     return HostUser.objects(id=id).first()
 
+
 login_manager.login_view = "login"
 login_manager.session_protection = "strong"
+
 
 @app.route("/api/hostLogin", methods=["POST"])
 def login():
@@ -226,11 +265,14 @@ def login():
         return(jsonify("Username or password error"), 401)
 
 # logout route
+
+
 @app.route("/api/hostLogout", methods=["POST"])
 @login_required
 def logout():
     logout_user()
     return(jsonify('logout success'), 200)
+
 
 @app.route("/api/displayHostUserInfo", methods=["POST"])
 def user_info():
@@ -244,19 +286,30 @@ def user_info():
 
 @socketio.event
 def createRoom(data):
-    while True:
-        quizId = ''.join(random.choice(string.ascii_lowercase)
-                         for i in range(6))
-        activeRooms = ActiveRooms(
-            roomId = quizId,
-            connectedUserId = [current_user.get_id()],
-            dateTime = datetime.datetime.now()
-        )
-        activeRooms.save()
-        print(f'room created with quiz ID: {quizId}')
-        emit(f'ID {quizId}')
-        return(f'ID {quizId}')
-        
+    quizId = ''.join(random.choice(string.ascii_lowercase)
+                     for i in range(6))
+
+    questions = []
+    timeLimit = 5
+    quizStarted = 'False'
+
+    activeRooms = ActiveRooms(
+        roomId=quizId,
+        connectedUserId=[1],
+        allConnectedUsers=[1],
+        dateTime=datetime.datetime.now(),
+        quizCompletedSuccessfully="False",
+        questions=questions,
+        timeLimit=timeLimit,
+        quizStarted=quizStarted,
+        currentQuestion="null"
+    )
+    activeRooms.save()
+    print(f'room created with quiz ID: {quizId}')
+    emit(f'ID {quizId}')
+
+    return(f'ID {quizId}')
+
 
 # join room
 @socketio.on('join')
@@ -266,9 +319,10 @@ def on_join(data):
     join_room(room)
     userPk = current_user.get_id()
     addUserToRoom(room, userPk)
+
+    quizEnv = ActiveRooms.objects(roomid=room).first()
     print('the join event was run')
-    send(f'{username} has entered the quizspace', to=room)
-    emit('notify')
+    emit('joinRoom', quizEnv.timeLimit)
     return True
 
 # exit room
@@ -287,41 +341,76 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
-    answer = data['answer']
-    questionId = data['questionId']
-    print(f'received answer: {answer} for question: {questionId}')
-    send('Received answer')
+    curUserId = current_user.get_id()
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+
+    Quenswers(
+        userId=curUserId,
+        questionId=quizEnv.currentQuestion,
+        answer=data['answer'],
+        dateTime=datetime.datetime.now(),
+        quizEnvId=str(quizEnv.pk)
+    )
+    Quenswers.save()
 
 # Send Question to quizspace
 # namespace is implied from the originating event
 
 
 @socketio.event
+def startQuiz(data):
+    curUserId = current_user.get_id()
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    quizEnv.quizStarted = "True"
+    quizEnv.save()
+    emit("complete")
+
+
+@socketio.event
+def prepareNextQuestion(data):
+    emit("prepareNextQuestion", "data")
+
+
+@socketio.event
 def sendQuestion(data):
-    send('QUESTION')
+    op = {}
+    curUserId = current_user.get_id()
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    questionLs = quizEnv.questions
+    curQuestion = questionLs[0]
+    quizEnv.currentQuestion = curQuestion
+    quizEnv.save()
+    questionLs.remove(curQuestion)
+    if len(questionLs) == 0:
+        op['lastQuestion'] = "True"
+    else:
+        op['lastQuestion'] = "False"
+    questionObj = Question.objects(id=curQuestion).first()
+    possAnswers = questionObj.poll
+    possAnswers.append(questionObj.answer)
+    op["possAnswers"] = possAnswers.sort()
+    op["questionType"] = questionObj.questionType
+    op["title"] = questionObj.title
+    op["bodyMD"] = questionObj.bodyMD
+    emit("Question", op)
 
 
 @socketio.event
 def finishQuiz(data):
     room = data['room']
     close_room(room)
-
-@socketio.event
-def createRoom(data):
-    print(data)
-    print(data[str("questions")])
-    questions = data['questions']
-    timeLimit = data['timeLimit']
-    room = ActiveRooms.objects(connectedUserId=current_user.get_id()).first()
-    usersId = room.connectedUserId
-    quizEnvironment = Quizzes(
-        usersId = usersId,
-        timeDate = datetime.datetime.now(),
-        timeLimit = timeLimit,
-        questions = questions
+    curUserId = current_user.get_id()
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    quiz = Quizzes(
+        roomId=quizEnv.roomID,
+        allConnectedUsers=quizEnv.allConnectedUsers,
+        dateTime=quizEnv.dateTime,
+        quizCompletedSuccessfully="True",
+        questions=quizEnv.questions,
+        timeLimit=quizEnv.timeLimit,
+        activeRoomId=str(quizEnv.pk)
     )
-    quizEnvironment.save()
-
+    quiz.save()
 
 
 ############################
@@ -331,8 +420,10 @@ def createRoom(data):
 def addUserToRoom(roomId, userId):
     room = ActiveRooms.objects(roomId=roomId).first()
     room.connectedUserId.append(userId)
+    room.allConnectedUsers.append(userId)
     room.save()
     onRoomUpdated(roomId)
+
 
 def removeUserFromRoom(roomId, userId):
     room = ActiveRooms.objects(roomId=roomId).first()
@@ -345,7 +436,8 @@ def removeUserFromRoom(roomId, userId):
         print('There was an error in this request')
         return (jsonify('BAD REQUEST'), 400)
     else:
-        pass 
+        pass
+
 
 def onRoomUpdated(roomId):
     room = ActiveRooms.objects(roomId=roomId).first()
@@ -353,11 +445,6 @@ def onRoomUpdated(roomId):
     room.save()
     print("emitting onRoomUpdated")
     emit("onRoomUpdated", connectedusers, to=roomId)
-
-
-
-
-
 
 
 #################
@@ -381,10 +468,10 @@ def createHostUser():
             lastName=requestData["lastName"],
             email=requestData["email"],
             passwordHash=requestData["passwordHash"],
-            created = datetime.datetime.now(),
-            lastEdit = datetime.datetime.now(),
-            lastSignIn = datetime.datetime.now()
-                
+            created=datetime.datetime.now(),
+            lastEdit=datetime.datetime.now(),
+            lastSignIn=datetime.datetime.now()
+
         )
         hostUser.save()
     except Exception as e:
@@ -413,32 +500,32 @@ def createTestUser():
 
 # checks user types
 
+
 @app.route('/check/userType', methods=['POST'])
 def checkUserType():
     request_data = request.get_json()
     if request_data == None:
-        return make_response({"error":"Nothing sent."}, 400)
+        return make_response({"error": "Nothing sent."}, 400)
 
     email = request_data['email'].lower()
     if not('@' in email):
-        return make_response({"error":"Not a valid email"}, 400)
+        return make_response({"error": "Not a valid email"}, 400)
 
     emailDomain = email.split("@", 1)[1]
 
     if emailDomain != "negearth.co.uk":
-        return make_response({"error":"Email is not of the correct type"}, 400)
+        return make_response({"error": "Email is not of the correct type"}, 400)
 
     testUser = TestUser.objects(email=email).first()
     hostUser = HostUser.objects(email=email).first()
 
     if testUser and hostUser:
-        return make_response({"error":"Email is associated with both host and test user type"}, 500)
+        return make_response({"error": "Email is associated with both host and test user type"}, 500)
     if hostUser:
-        return make_response({"user":"hostUser"}, 200)
+        return make_response({"user": "hostUser"}, 200)
     if testUser:
-        return make_response({"user":"testUser"}, 200)
-    return make_response({"error":"User not found"}, 400)
-
+        return make_response({"user": "testUser"}, 200)
+    return make_response({"error": "User not found"}, 400)
 
 
 @app.route('/api/questions', methods=['GET'])
@@ -465,7 +552,7 @@ def apiQuestionsGet():
     question = Question.objects(category=cat).first()
 
     if not question:
-        return make_response({"error":question}, 404)
+        return make_response({"error": question}, 404)
 
     return (jsonify(Question.objects(category=cat)), 200)
 
@@ -492,7 +579,9 @@ def createQuestion():
     else:
         return question.to_json()
 
-#Edits Question
+# Edits Question
+
+
 @app.route('/api/questions', methods=['PUT'])
 def editsQuestion():
     requestData = request.get_json()
@@ -522,6 +611,7 @@ def editsQuestion():
     else:
         return(question.to_json())
 
+
 @app.route('/api/questions', methods=["DELETE"])
 def deletesQuestions():
     try:
@@ -529,7 +619,7 @@ def deletesQuestions():
         id = requestData["id"]
         question = Question.objects(id=id).first()
         if not question:
-            raise ResourceNotFound(resourceType = 'question')
+            raise ResourceNotFound(resourceType='question')
         question.delete()
     except ResourceNotFound:
         print('Question Not Found')
@@ -537,7 +627,7 @@ def deletesQuestions():
     except Exception:
         print('There was an error in this request')
         return (jsonify('BAD REQUEST'), 400)
-    else:        
+    else:
         return (jsonify("success"))
 
 
@@ -545,12 +635,13 @@ def deletesQuestions():
 def getCategories():
     return(jsonify(Categories.objects), 200)
 
+
 @app.route('/api/categories', methods=["POST"])
 def postCategories():
     requestData = request.get_json()
     try:
         catg = Categories(
-            name = requestData['name']
+            name=requestData['name']
         )
         catg.save()
     except Exception:
@@ -574,6 +665,7 @@ def putCategories():
     else:
         return(jsonify(category))
 
+
 @app.route('/api/categories', methods=["DELETE"])
 def deletesCategories():
     requestData = request.get_json()
@@ -582,7 +674,7 @@ def deletesCategories():
         migrateTo = requestData["migrateTo"]
         category = Categories.objects(id=id).first()
         if not category:
-            raise ResourceNotFound(resourceType = 'category')
+            raise ResourceNotFound(resourceType='category')
         if not category.assocQuestions():
             category.delete()
         else:
@@ -597,10 +689,10 @@ def deletesCategories():
     else:
         return(jsonify("success"))
 
+
 @app.route('/exception/badRequestError')
 def testBadRequestError():
-    raise BadRequestError() 
-
+    raise BadRequestError()
 
 
 # runs server
