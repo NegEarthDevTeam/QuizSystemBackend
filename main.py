@@ -89,6 +89,55 @@ class TestUser(db.Document):
         })
 
 
+class UserType(db.Document):
+    firstName = db.StringField()
+    lastName = db.StringField()
+    email = db.StringField()
+    passwordHash = db.StringField()
+    created = db.DateTimeField()
+    lastEdit = db.DateTimeField()
+    lastSignIn = db.DateTimeField()
+    hostOrTest = db.StringField()
+
+    def to_json(self):
+        return jsonify({
+            '_id': str(self.pk),
+            'First Name': self.firstName,
+            'Last Name': self.lastName,
+            'Email': self.email,
+            'Creation Date': self.created,
+            'Edit Date': self.lastEdit,
+            'Last Sign In': self.lastSignIn,
+            'hostOrTest': self.hostOrTest
+        })
+
+    def is_authenticated(self):
+        return True
+
+    def is_active(self):
+        return True
+
+    def is_anonymous(self):
+        return False
+
+    def get_id(self):
+        return str(self.pk)
+
+    @property
+    def host(self):
+        if self.hostOrTest == "host":
+            return True
+        else:
+            return False
+
+    @property
+    def test(self):
+        if self.hostOrTest == 'test':
+            return True
+        else:
+            return False
+
+
 class Quizzes(db.Document):
     roomId = db.StringField()
     allConnectedUsers = db.ListField()
@@ -244,22 +293,25 @@ class NotNegResource(Exception):
 
 @login_manager.user_loader
 def loaduser(id):
-    return HostUser.objects(id=id).first()
+    return UserType.objects(id=id).first()
 
 
 login_manager.login_view = "login"
 login_manager.session_protection = "strong"
 
 
-@app.route("/api/hostLogin", methods=["POST"])
+@app.route("/api/Login", methods=["POST"])
 def login():
     request_data = request.get_json()
     email = request_data["email"]
-    passwordHash = request_data["passwordHash"]
-    hostUser = HostUser.objects(email=email, passwordHash=passwordHash).first()
-    if hostUser:
-        login_user(hostUser, remember=True, fresh=False)
-        hostUser.update(lastSignIn=datetime.datetime.now())
+    if 'passwordHash' in request_data:
+        passwordHash = request_data["passwordHash"]
+    else:
+        passwordHash = request_data["email"]
+    userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+    if userObj:
+        login_user(userObj, remember=True, fresh=False)
+        userObj.update(lastSignIn=datetime.datetime.now())
         return(jsonify('success'), 200)
     else:
         return(jsonify("Username or password error"), 401)
@@ -277,28 +329,38 @@ def logout():
 @app.route("/api/displayHostUserInfo", methods=["POST"])
 def user_info():
     if current_user.is_authenticated:
-        return(jsonify(current_user.to_json()), 200)
+        return(current_user.to_json(), 200)
+
+
+@app.route("/api/isUserLoggedIn", methods=["GET"])
+def apiIsUserLoggedIn():
+    if current_user.is_authenticated:
+        print(f"User ID is {current_user.get_id()}")
+        return('True')
+    elif not current_user.is_authenticated:
+        return('False')
 
 ####################
 # Socket IO Events #
 ####################
 
 
+@app.route('/socketIO/API/createRoom', methods=["POST"])
 @socketio.event
-def createRoom(data):
+# @login_required
+def createRoom():
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
 
     questions = []
     timeLimit = 5
     quizStarted = 'False'
-
+    print(f"User ID is {current_user.get_id()}")
     activeRooms = ActiveRooms(
         roomId=quizId,
-        connectedUserId=[1],
-        allConnectedUsers=[1],
+        connectedUserId=[current_user.get_id()],
+        allConnectedUsers=[current_user.get_id()],
         dateTime=datetime.datetime.now(),
-        quizCompletedSuccessfully="False",
         questions=questions,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
@@ -306,7 +368,7 @@ def createRoom(data):
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
-    emit(f'ID {quizId}')
+    # CHANGEBACK emit(f'ID {quizId}')
 
     return(f'ID {quizId}')
 
@@ -463,15 +525,15 @@ def sm():
 def createHostUser():
     requestData = request.get_json()
     try:
-        hostUser = HostUser(
+        hostUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
             email=requestData["email"],
             passwordHash=requestData["passwordHash"],
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
-            lastSignIn=datetime.datetime.now()
-
+            lastSignIn=datetime.datetime.now(),
+            hostOrTest='host'
         )
         hostUser.save()
     except Exception as e:
@@ -486,17 +548,25 @@ def createHostUser():
 
 @app.route('/create/testUser', methods=['POST'])
 def createTestUser():
+    requestData = request.get_json()
     try:
-        requestData = request.get_json()
-        testUser = TestUser(
+        testUser = UserType(
+            firstName='Test',
+            lastName='User',
             email=requestData["email"],
+            passwordHash=requestData["email"],
+            created=datetime.datetime.now(),
+            lastEdit=datetime.datetime.now(),
+            lastSignIn=datetime.datetime.now(),
+            hostOrTest='test'
         )
         testUser.save()
-    except Exception:
-        print(f'There was an error in this request')
+    except Exception as e:
+        print('There was an error in this request')
+        print(e)
         return (jsonify('BAD REQUEST'), 400)
     else:
-        return(jsonify(testUser), 200)
+        return (jsonify(testUser))
 
 # checks user types
 
@@ -516,14 +586,11 @@ def checkUserType():
     if emailDomain != "negearth.co.uk":
         return make_response({"error": "Email is not of the correct type"}, 400)
 
-    testUser = TestUser.objects(email=email).first()
-    hostUser = HostUser.objects(email=email).first()
+    userObj = UserType.objects(email=email).first()
 
-    if testUser and hostUser:
-        return make_response({"error": "Email is associated with both host and test user type"}, 500)
-    if hostUser:
+    if userObj.host:
         return make_response({"user": "hostUser"}, 200)
-    if testUser:
+    if userObj.test:
         return make_response({"user": "testUser"}, 200)
     return make_response({"error": "User not found"}, 400)
 
