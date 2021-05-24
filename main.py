@@ -4,7 +4,7 @@ import logic
 import random
 import string
 from flask_mongoengine import *
-from flask_socketio import *
+from flask_socketio import SocketIO, emit, send, join_room, leave_room
 from flask import *
 import datetime
 from flask_login import (
@@ -29,26 +29,25 @@ app.config["MONGODB_SETTINGS"] = {
 db = MongoEngine(app)
 
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = False
+app.config['SECRET_KEY'] = 'quizSystemSecretKey'
+#app.config['SESSION_PERMANENT'] = False
 
 login_manager = LoginManager(app)
 Session(app)
-
-login_manager.init_app(app)
-login_manager.login_view = "login"
 
 app.secret_key = "quizSystemSecretKey"
 
 
 socketio = SocketIO(app, cors_allowed_origins='*', manage_session=False)
 
-# create room is actually just a string generator that then initiates the quiz in the DB
-# check that the room code isn't currently in sure with any of the other active quizes
+print(socketio.manage_session)
 
 
 #####################
 # CLASSES FOR MONGO #
 #####################
+
+
 class HostUser(db.Document):
     firstName = db.StringField()
     lastName = db.StringField()
@@ -304,25 +303,39 @@ def loaduser(id):
 
 
 #login_manager.login_view = "login"
-#login_manager.session_protection = "strong"
+login_manager.session_protection = "strong"
 
 
 @app.route("/api/Login", methods=["POST"])
 def login():
     request_data = request.get_json()
-    email = request_data["email"]
-    if 'passwordHash' in request_data:
-        passwordHash = request_data["passwordHash"]
-    else:
-        passwordHash = request_data["email"]
-    userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
-    if userObj:
-        login_user(userObj)
-        userObj.update(lastSignIn=datetime.datetime.now())
-        session['theID'] = 'samsID'
-        return(jsonify('success'), 200)
-    else:
-        return(jsonify("Username or password error"), 401)
+    data = request_data
+    if 'session' in data:
+        session['value'] = data['session']
+    elif 'email' in data:
+        if data['email']:
+            email = request_data["email"]
+            if 'passwordHash' in request_data:
+                passwordHash = request_data["passwordHash"]
+            else:
+                passwordHash = request_data["email"]
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
+            if userObj:
+                login_user(userObj)
+                userObj.update(lastSignIn=datetime.datetime.now())
+                print(f'set the variable theID to {userObj.get_id()}')
+                print(session.keys())
+                print(session.values())
+
+                session['theID'] = userObj.get_id()
+                return(jsonify({
+                    'status': 'success',
+                    'userID': userObj.get_id()
+                }
+                ), 200)
+            else:
+                return(jsonify("Username or password error"), 401)
 
 # logout route
 
@@ -360,9 +373,9 @@ def forward():
     return '1'  # createRoom()
 
 
-@app.route('/socketIO/API/createRoom2', methods=["POST"])
-# @socketio.on('createRoom')
-def createRoom():
+# @app.route('/socketIO/API/createRoom2', methods=["POST"])
+@socketio.on('createRoom')
+def createRoom(data):
     #print(session.get('currentUser', 'user not found'))
     # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
@@ -371,6 +384,9 @@ def createRoom():
     timeLimit = 5
     quizStarted = 'False'
     print(f"User ID is {current_user.get_id()}")
+    print(data)
+    print(session.keys())
+    print(session.values())
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[current_user.get_id()],
