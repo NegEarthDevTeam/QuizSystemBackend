@@ -299,11 +299,7 @@ class NotNegResource(Exception):
 
 @login_manager.user_loader
 def loaduser(id):
-    print('User Loader Running')
-    print(id)
     userOBJ = UserType.objects(id=id).first()
-    print(f"First name: {userOBJ.firstName}")
-
     return userOBJ
 
 
@@ -321,10 +317,9 @@ def login():
         passwordHash = request_data["email"]
     userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
     if userObj:
-        login_user(userObj, remember=True, fresh=False)
+        login_user(userObj)
         userObj.update(lastSignIn=datetime.datetime.now())
         session['theID'] = 'samsID'
-        set(str(userObj.get_id()))
         return(jsonify('success'), 200)
     else:
         return(jsonify("Username or password error"), 401)
@@ -360,13 +355,15 @@ def apiIsUserLoggedIn():
 
 @app.route('/socketIO/API/createRoom', methods=["POST"])
 def forward():
-    print(session.get('currentUser', 'was not set'))
+    print(
+        f" the current user is: {current_user.firstName} {current_user.lastName}")
     return '1'  # createRoom()
 
 
-@socketio.event
+@app.route('/socketIO/API/createRoom2', methods=["POST"])
+# @socketio.on('createRoom')
 def createRoom():
-    print(session.get('currentUser', 'user not found'))
+    #print(session.get('currentUser', 'user not found'))
     # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
@@ -376,8 +373,8 @@ def createRoom():
     print(f"User ID is {current_user.get_id()}")
     activeRooms = ActiveRooms(
         roomId=quizId,
-        connectedUserId=[session['currentUser']],
-        allConnectedUsers=[session['currentUser']],
+        connectedUserId=[current_user.get_id()],
+        allConnectedUsers=[current_user.get_id()],
         dateTime=datetime.datetime.now(),
         questions=questions,
         timeLimit=timeLimit,
@@ -386,7 +383,7 @@ def createRoom():
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
-    # CHANGEBACK emit(f'ID {quizId}')
+    #emit('id', f'ID {quizId}', namespace='/', )
 
     return(f'ID {quizId}')
 
@@ -651,7 +648,7 @@ def createQuestion():
             category=requestData["category"],
             questionType=requestData["questionType"],
             answer=requestData["answer"],
-            poll=requestData["poll"],
+            poll=requestData["poll"] if "poll" in requestData else None,
             title=requestData["title"],
             bodyMD=requestData["bodyMD"],
             videoURL=requestData["videoURL"],
@@ -790,7 +787,7 @@ def set():
 
 @app.route('/get/', methods=['GET'])
 def get():
-    return session.get('theID', 'was not set')
+    return (f"{session.get('theID', 'was not set')} + {current_user.firstName} + {current_user.lastName}")
 
 
 @app.route('/SAM/api/login', methods=['GET', 'POST'])
@@ -811,9 +808,18 @@ def samCustomLogin():
             userObj = UserType.objects(
                 email=email, passwordHash=passwordHash).first()
             login_user(userObj)
+            return('login')
         else:
             logout_user()
+            return('logout')
     return '', 204
+
+
+@app.route("/activeRooms/Delete/All", methods=['DELETE'])
+def deleteAllActiveRooms():
+    for room in ActiveRooms.objects:
+        room.delete()
+    return "success"
 
 
 # runs server
