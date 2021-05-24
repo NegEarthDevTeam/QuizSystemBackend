@@ -1,5 +1,4 @@
 from logging import error, exception
-from os import name
 from warnings import catch_warnings
 import logic
 import random
@@ -11,10 +10,12 @@ import datetime
 from flask_login import (
     current_user,
     LoginManager,
+    UserMixin,
     login_user,
     logout_user,
     login_required,
 )
+from flask_session import Session
 global db
 
 app = Flask(__name__)
@@ -27,14 +28,19 @@ app.config["MONGODB_SETTINGS"] = {
 }
 db = MongoEngine(app)
 
-login_manager = LoginManager()
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False
+
+login_manager = LoginManager(app)
+Session(app)
 
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
 app.secret_key = "quizSystemSecretKey"
 
-socketio = SocketIO(app, cors_allowed_origins='*')
+
+socketio = SocketIO(app, cors_allowed_origins='*', manage_session=False)
 
 # create room is actually just a string generator that then initiates the quiz in the DB
 # check that the room code isn't currently in sure with any of the other active quizes
@@ -293,11 +299,16 @@ class NotNegResource(Exception):
 
 @login_manager.user_loader
 def loaduser(id):
-    return UserType.objects(id=id).first()
+    print('User Loader Running')
+    print(id)
+    userOBJ = UserType.objects(id=id).first()
+    print(f"First name: {userOBJ.firstName}")
+
+    return userOBJ
 
 
-login_manager.login_view = "login"
-login_manager.session_protection = "strong"
+#login_manager.login_view = "login"
+#login_manager.session_protection = "strong"
 
 
 @app.route("/api/Login", methods=["POST"])
@@ -312,6 +323,8 @@ def login():
     if userObj:
         login_user(userObj, remember=True, fresh=False)
         userObj.update(lastSignIn=datetime.datetime.now())
+        session['theID'] = 'samsID'
+        set(str(userObj.get_id()))
         return(jsonify('success'), 200)
     else:
         return(jsonify("Username or password error"), 401)
@@ -346,20 +359,25 @@ def apiIsUserLoggedIn():
 
 
 @app.route('/socketIO/API/createRoom', methods=["POST"])
+def forward():
+    print(session.get('currentUser', 'was not set'))
+    return '1'  # createRoom()
+
+
 @socketio.event
-# @login_required
 def createRoom():
+    print(session.get('currentUser', 'user not found'))
+    # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
-
     questions = []
     timeLimit = 5
     quizStarted = 'False'
     print(f"User ID is {current_user.get_id()}")
     activeRooms = ActiveRooms(
         roomId=quizId,
-        connectedUserId=[current_user.get_id()],
-        allConnectedUsers=[current_user.get_id()],
+        connectedUserId=[session['currentUser']],
+        allConnectedUsers=[session['currentUser']],
         dateTime=datetime.datetime.now(),
         questions=questions,
         timeLimit=timeLimit,
@@ -760,6 +778,42 @@ def deletesCategories():
 @app.route('/exception/badRequestError')
 def testBadRequestError():
     raise BadRequestError()
+
+
+@app.route('/set/', methods=['GET'])
+def set():
+    idVar = 'this is my UIDIDIDIDI'
+    session['theID'] = idVar
+    #print(f"idVar is {idVar}")
+    return 'ok'
+
+
+@app.route('/get/', methods=['GET'])
+def get():
+    return session.get('theID', 'was not set')
+
+
+@app.route('/SAM/api/login', methods=['GET', 'POST'])
+def samCustomLogin():
+    if request.method == 'GET':
+        return jsonify({
+            'session': session.get('value', ''),
+            'user': current_user.firstName
+            if current_user.is_authenticated else 'anonymous'
+        })
+    data = request.get_json()
+    if 'session' in data:
+        session['value'] = data['session']
+    elif 'email' in data:
+        if data['email']:
+            email = data['email']
+            passwordHash = data['passwordHash']
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
+            login_user(userObj)
+        else:
+            logout_user()
+    return '', 204
 
 
 # runs server
