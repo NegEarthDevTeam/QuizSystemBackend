@@ -4,7 +4,7 @@ import logic
 import random
 import string
 from flask_mongoengine import *
-from flask_socketio import SocketIO, emit, send, join_room, leave_room
+from flask_socketio import SocketIO, emit, send, join_room, leave_room, close_room
 from flask import *
 import datetime
 from flask_login import (
@@ -39,8 +39,6 @@ app.secret_key = "quizSystemSecretKey"
 
 
 socketio = SocketIO(app, cors_allowed_origins='*', manage_session=False)
-
-print(socketio.manage_session)
 
 
 #####################
@@ -213,6 +211,7 @@ class ActiveRooms(db.Document):
     dateTime = db.DateTimeField()
     quizStarted = db.StringField()
     questions = db.ListField()
+    allQuestions = db.ListField()
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
 
@@ -234,8 +233,11 @@ class Quenswers(db.Document):
     userId = db.StringField()
     questionId = db.StringField()
     answer = db.StringField()
-    dateTime = db.DateTimeField()
+    submitDateTime = db.DateTimeField()
     quizEnvId = db.StringField()
+    quizId = db.StringField()
+    markedBy = db.StringField()
+    markedDateTimeStr = db.StringField()
 
     def to_json(self):
         return jsonify({
@@ -243,8 +245,11 @@ class Quenswers(db.Document):
             'User ID': self.userId,
             'Question ID': self.questionId,
             'Answer': self.answer,
-            'Date Time': self.dateTime,
-            'Quiz Environment ID': self.quizEnvId
+            'Submit Date Time': self.submitDateTime,
+            'Quiz Environment ID': self.quizEnvId,
+            'Quiz OBJ ID': self.quizId,
+            'Marker ID': self.markedBy,
+            'Marked Date Time String': self.markedDateTimeStr
         })
 
 
@@ -324,11 +329,7 @@ def login():
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
-                print(f'set the variable theID to {userObj.get_id()}')
-                print(session.keys())
-                print(session.values())
 
-                session['theID'] = userObj.get_id()
                 return(jsonify({
                     'status': 'success',
                     'userID': userObj.get_id()
@@ -380,19 +381,18 @@ def createRoom(data):
     # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
-    questions = []
-    timeLimit = 5
-    quizStarted = 'False'
-    print(f"User ID is {current_user.get_id()}")
     print(data)
-    print(session.keys())
-    print(session.values())
+    questions = data['questionIDs']
+    timeLimit = data['timeLimit']
+    requestUserId = data['userID']
+    quizStarted = 'False'
     activeRooms = ActiveRooms(
         roomId=quizId,
-        connectedUserId=[current_user.get_id()],
-        allConnectedUsers=[current_user.get_id()],
+        connectedUserId=[requestUserId],
+        allConnectedUsers=[requestUserId],
         dateTime=datetime.datetime.now(),
         questions=questions,
+        allQuestions=questions,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
         currentQuestion="null"
@@ -410,12 +410,20 @@ def on_join(data):
     username = data['username']
     room = data['room']
     join_room(room)
-    userPk = current_user.get_id()
-    addUserToRoom(room, userPk)
+    userPk = data['userID']
 
-    quizEnv = ActiveRooms.objects(roomid=room).first()
+    roomObj = ActiveRooms.objects(roomId=room).first()
     print('the join event was run')
-    emit('joinRoom', quizEnv.timeLimit)
+    print(data.keys())
+    print(data.values())
+    emit('joinRoom', roomObj.timeLimit)
+
+    roomObj.connectedUserId.append(userPk)
+    roomObj.allConnectedUsers.append(userPk)
+    roomObj.save()
+    print("emitting onRoomUpdated")
+    emit("onRoomUpdated", roomObj.connectedUserId, to=room)
+    emit("event", )
     return True
 
 # exit room
@@ -434,17 +442,22 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
-    curUserId = current_user.get_id()
+    curUserId = data['userID']
+    print(data)
+    print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
 
-    Quenswers(
+    thisAnswer = Quenswers(
         userId=curUserId,
         questionId=quizEnv.currentQuestion,
         answer=data['answer'],
-        dateTime=datetime.datetime.now(),
-        quizEnvId=str(quizEnv.pk)
+        submitDateTime=datetime.datetime.now(),
+        quizEnvId=str(quizEnv.pk),
+        quizId="None",
+        markedBy="None",
+        markedDateTimeStr='None'
     )
-    Quenswers.save()
+    thisAnswer.save()
 
 # Send Question to quizspace
 # namespace is implied from the originating event
@@ -452,7 +465,7 @@ def submitAnswer(data):
 
 @socketio.event
 def startQuiz(data):
-    curUserId = current_user.get_id()
+    curUserId = data['userID']
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
     quizEnv.save()
@@ -467,55 +480,61 @@ def prepareNextQuestion(data):
 @socketio.event
 def sendQuestion(data):
     op = {}
-    curUserId = current_user.get_id()
+    curUserId = data['userID']
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     questionLs = quizEnv.questions
     curQuestion = questionLs[0]
     quizEnv.currentQuestion = curQuestion
+    quizEnv.questions.remove(curQuestion)
     quizEnv.save()
-    questionLs.remove(curQuestion)
+
     if len(questionLs) == 0:
         op['lastQuestion'] = "True"
     else:
         op['lastQuestion'] = "False"
     questionObj = Question.objects(id=curQuestion).first()
     possAnswers = questionObj.poll
-    possAnswers.append(questionObj.answer)
+    possAnswers.append(questionObj.answer[0])
     op["possAnswers"] = possAnswers.sort()
     op["questionType"] = questionObj.questionType
     op["title"] = questionObj.title
     op["bodyMD"] = questionObj.bodyMD
     emit("Question", op)
+    print(op)
 
 
 @socketio.event
 def finishQuiz(data):
-    room = data['room']
-    close_room(room)
-    curUserId = current_user.get_id()
+    print("finish quiz")
+    #room = data['room']
+    # close_room(room)
+    curUserId = data['userID']
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quiz = Quizzes(
-        roomId=quizEnv.roomID,
+        roomId=quizEnv.roomId,
         allConnectedUsers=quizEnv.allConnectedUsers,
         dateTime=quizEnv.dateTime,
         quizCompletedSuccessfully="True",
-        questions=quizEnv.questions,
+        questions=quizEnv.allQuestions,
         timeLimit=quizEnv.timeLimit,
         activeRoomId=str(quizEnv.pk)
     )
     quiz.save()
+    quizEnv.delete()
 
 
 ############################
 # SOCKETIO LOGIC FUNCTIONS #
 ############################
 
-def addUserToRoom(roomId, userId):
-    room = ActiveRooms.objects(roomId=roomId).first()
-    room.connectedUserId.append(userId)
-    room.allConnectedUsers.append(userId)
-    room.save()
-    onRoomUpdated(roomId)
+def addUserToRoom(room, userPK):
+    roomObj = ActiveRooms.objects(roomId=room).first()
+    roomObj.connectedUserId.append(userPK)
+    roomObj.allConnectedUsers.append(userPK)
+    roomObj.save()
+    onRoomUpdated(room)
+    print("emitting onRoomUpdated")
+    emit("onRoomUpdated", connectedusers, to=roomId)
 
 
 def removeUserFromRoom(roomId, userId):
