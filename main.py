@@ -401,7 +401,7 @@ def createRoom(data):
     print(f'room created with quiz ID: {quizId}')
     #emit('id', f'ID {quizId}', namespace='/', )
 
-    return(f'ID {quizId}')
+    return(quizId)
 
 
 # join room
