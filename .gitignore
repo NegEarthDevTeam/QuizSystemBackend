@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#VSCode settings
+.vscode/
+
+#flask_session
+flask_session/
