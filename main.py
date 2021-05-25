@@ -434,6 +434,7 @@ def on_leave(data):
     username = data['username']
     room = data['room']
     leave_room(room)
+
     print('the ')
     send(username + ' has left the quizspace.', to=room)
 
@@ -469,6 +470,7 @@ def startQuiz(data):
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
     quizEnv.save()
+    print("quiz started")
     emit("complete")
 
 
@@ -488,18 +490,24 @@ def sendQuestion(data):
     quizEnv.questions.remove(curQuestion)
     quizEnv.save()
 
+    thisRoom=data['room']
+
     if len(questionLs) == 0:
         op['lastQuestion'] = "True"
     else:
         op['lastQuestion'] = "False"
     questionObj = Question.objects(id=curQuestion).first()
-    possAnswers = questionObj.poll
-    possAnswers.append(questionObj.answer[0])
-    op["possAnswers"] = possAnswers.sort()
+
+    if questionObj.questionType == "multiple":
+        possAnswers = questionObj.poll + questionObj.answer
+        random.shuffle(possAnswers)
+        op["possAnswers"] = possAnswer
+        op["answerQty"] = len(questionObj.answer)
+    
     op["questionType"] = questionObj.questionType
     op["title"] = questionObj.title
     op["bodyMD"] = questionObj.bodyMD
-    emit("Question", op)
+    emit("Question", op,to=thisRoom)
     print(op)
 
 
