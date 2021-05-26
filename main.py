@@ -196,6 +196,7 @@ class Categories(db.Document):
             'name': self.name
         })
 
+    @property
     def assocQuestions(self):
         op = []
         for question in Question.objects:
@@ -806,28 +807,38 @@ def apiQuestionsGet():
     getID = request.args.get("id")
 
     request_data = request.get_json()
+
     catPres, data = False, []
 
     if request_data != None:
         catPres = True if "category" in request_data else False
 
+    categ = request.args.get('category')
+
+    catPres = False if categ == 'null' else True
+
     if getID:
         res = Question.objects(id=getID).first()
         if not res:
-            return make_response({"error": res}, 404)
+            return make_response({"error pos 1": res}, 404)
         else:
             return make_response(res.to_json(), 200)
 
     if not catPres:
         return (jsonify(Question.objects), 200)
 
-    cat = request_data["category"]
-    question = Question.objects(category=cat).first()
+    if categ == '_all_':
+        op = {}
+        for category in Categories.objects:
+            op[category.name] = category.assocQuestions
+        return op
+
+    question = Question.objects(category=categ).first()
 
     if not question:
-        return make_response({"error": question}, 404)
+        return make_response("This category either doesn't exist or has no questions assigned to it", 404)
 
-    return (jsonify(Question.objects(category=cat)), 200)
+    return (jsonify(Question.objects(category=categ)), 200)
 
 
 # creates questions
@@ -978,7 +989,9 @@ def set():
 
 @app.route('/get/', methods=['GET'])
 def get():
-    return (f"{session.get('theID', 'was not set')} + {current_user.firstName} + {current_user.lastName}")
+    yolo = request.args.get('doesnei')
+    print(yolo)
+    return(jsonify(yolo))
 
 
 @app.route('/SAM/api/login', methods=['GET', 'POST'])
