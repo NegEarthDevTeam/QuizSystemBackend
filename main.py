@@ -214,6 +214,7 @@ class ActiveRooms(db.Document):
     allQuestions = db.ListField()
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
+    lastQuestion = db.StringField()
 
     def to_json(self):
         return jsonify({
@@ -225,7 +226,8 @@ class ActiveRooms(db.Document):
             'Questions': self.questions,
             'Time Limit': self.timeLimit,
             'Quiz Started': self.quizStarted,
-            'Current Question': self.currentQuestion
+            'Current Question': self.currentQuestion,
+            'lastQuestion': self.lastQuestion
         })
 
 
@@ -295,6 +297,17 @@ class NotNegResource(Exception):
 
     def __str__(self):
         return('You have tried to use a non NEG resource')
+
+
+class LastQuestion(Exception):
+    def __init__(self, message):
+        if message:
+            self.message = message
+        else:
+            pass
+
+    def __str__(self):
+        return('this was the last question in this room')
 
 ############################
 # Authentication Endpoints #
@@ -435,7 +448,8 @@ def createRoom(data):
         allQuestions=questions,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
-        currentQuestion="null"
+        currentQuestion="initiateStr",
+        lastQuestion='initiateStr'
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
@@ -519,6 +533,7 @@ def startQuiz(data):
     try:
         op = {}
         curUserId = data['userID']
+        print(curUserId)
         quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
         questionLs = quizEnv.questions
         print(quizEnv.questions)
@@ -528,10 +543,19 @@ def startQuiz(data):
         quizEnv.questions.remove(curQuestion)
         quizEnv.save()
 
+        if quizEnv.lastQuestion == 'True':
+            print('was last question')
+            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
+
         if len(quizEnv.questions) == 0:
             op['lastQuestion'] = "True"
+            quizEnv.lastQuestion = 'True'
         else:
             op['lastQuestion'] = "False"
+            quizEnv.lastQuestion = 'False'
+
+        quizEnv.save()
+
         questionObj = Question.objects(id=curQuestion).first()
 
         if questionObj.questionType == "multiple":
@@ -543,6 +567,8 @@ def startQuiz(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
+        print('the quizEnv firstQuestion should have been set by now')
+        print(quizEnv.currentQuestion)
     except Exception as err:
         print('there was an error')
         print(err)
@@ -562,20 +588,32 @@ def sendQuestion(data):
         print('sending question')
         send('question was sent')
         op = {}
-        curUserId = data['userID']
-        quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
-        questionLs = quizEnv.questions
-        curQuestion = questionLs[0]
-        quizEnv.currentQuestion = curQuestion
-        quizEnv.questions.remove(curQuestion)
-        quizEnv.save()
-
-        thisRoom = data['room']
+        roomId = data['roomId']
+        print(roomId)
+        quizEnv = ActiveRooms.objects(roomId=roomId).first()
+        print(quizEnv.roomId)
+        if quizEnv.lastQuestion == 'True':
+            print('was last question')
+            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
         if len(quizEnv.questions) == 0:
             op['lastQuestion'] = "True"
+            quizEnv.lastQuestion = 'True'
         else:
             op['lastQuestion'] = "False"
+            quizEnv.lastQuestion = 'False'
+
+        questionLs = quizEnv.questions
+        print(quizEnv.questions)
+        print(questionLs)
+        curQuestion = questionLs[0]
+        quizEnv.currentQuestion = curQuestion
+        quizEnv.questions.remove(curQuestion)
+
+        thisRoom = data['room']
+
+        quizEnv.save()
+
         questionObj = Question.objects(id=curQuestion).first()
 
         if questionObj.questionType == "multiple":
@@ -587,6 +625,8 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
+    except LastQuestion:
+        print('caught that fact it was the last question')
     except Exception:
         print('there was an error')
     else:
@@ -647,7 +687,8 @@ def onRoomUpdated(roomId):
     connectedusers = room.connectedUserId
     op = []
     for user in connectedusers:
-        op.append(user)
+        userObj = UserType.objects(id=user).first()
+        op.append(userObj.firstName)
     room.save()
     print("emitting onRoomUpdated")
     emit("onRoomUpdated", op, to=roomId)
