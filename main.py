@@ -588,7 +588,7 @@ def sendQuestion(data):
         print('sending question')
         send('question was sent')
         op = {}
-        roomId = data['roomId']
+        roomId = data['room']
         print(roomId)
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
         print(quizEnv.roomId)
