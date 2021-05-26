@@ -532,10 +532,11 @@ def startQuiz(data):
 
     try:
         op = {}
-        curUserId = data['userID']
-        print(curUserId)
-        quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+        roomId = data['room']
+        print(f"var room Id {roomId}")
+        quizEnv = ActiveRooms.objects(roomId=roomId).first()
         questionLs = quizEnv.questions
+        print(f"quizEnv roomId {quizEnv.roomId}")
         print(quizEnv.questions)
         print(f"request.sid is {request.sid}")
         curQuestion = questionLs[0]
@@ -547,10 +548,14 @@ def startQuiz(data):
             print('was last question')
             raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
+        print(f"questions list length is {len(quizEnv.questions)}")
+        print(quizEnv.questions)
         if len(quizEnv.questions) == 0:
+            print('lastQuestion = True')
             op['lastQuestion'] = "True"
             quizEnv.lastQuestion = 'True'
         else:
+            print('lastQuestion = False')
             op['lastQuestion'] = "False"
             quizEnv.lastQuestion = 'False'
 
@@ -585,7 +590,7 @@ def prepareNextQuestion(data):
 @socketio.event
 def sendQuestion(data):
     try:
-        print('sending question')
+        print('sendQuestionEvent')
         send('question was sent')
         op = {}
         roomId = data['room']
@@ -596,12 +601,9 @@ def sendQuestion(data):
             print('was last question')
             raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
-        if len(quizEnv.questions) == 0:
-            op['lastQuestion'] = "True"
-            quizEnv.lastQuestion = 'True'
-        else:
-            op['lastQuestion'] = "False"
-            quizEnv.lastQuestion = 'False'
+        print(f"questions list length is {len(quizEnv.questions)}")
+        print(quizEnv.questions)
+        
 
         questionLs = quizEnv.questions
         print(quizEnv.questions)
@@ -611,6 +613,15 @@ def sendQuestion(data):
         quizEnv.questions.remove(curQuestion)
 
         thisRoom = data['room']
+
+        if len(quizEnv.questions) == 0:
+            print('lastQuestion = True')
+            op['lastQuestion'] = "True"
+            quizEnv.lastQuestion = 'True'
+        else:
+            print('lastQuestion = False')
+            op['lastQuestion'] = "False"
+            quizEnv.lastQuestion = 'False'
 
         quizEnv.save()
 
