@@ -215,6 +215,7 @@ class ActiveRooms(db.Document):
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
     lastQuestion = db.StringField()
+    firstQuestion = db.StringField()
 
     def to_json(self):
         return jsonify({
@@ -227,7 +228,8 @@ class ActiveRooms(db.Document):
             'Time Limit': self.timeLimit,
             'Quiz Started': self.quizStarted,
             'Current Question': self.currentQuestion,
-            'lastQuestion': self.lastQuestion
+            'lastQuestion': self.lastQuestion,
+            'firstQuestion': self.firstQuestion
         })
 
 
@@ -449,7 +451,8 @@ def createRoom(data):
         timeLimit=timeLimit,
         quizStarted=quizStarted,
         currentQuestion="initiateStr",
-        lastQuestion='initiateStr'
+        lastQuestion='initiateStr',
+        firstQuestion='initiatieStr'
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
@@ -542,6 +545,7 @@ def startQuiz(data):
         curQuestion = questionLs[0]
         quizEnv.currentQuestion = curQuestion
         quizEnv.questions.remove(curQuestion)
+        quizEnv.firstQuestion = 'True'
         quizEnv.save()
 
         if quizEnv.lastQuestion == 'True':
@@ -603,14 +607,18 @@ def sendQuestion(data):
 
         print(f"questions list length is {len(quizEnv.questions)}")
         print(quizEnv.questions)
-        
 
         questionLs = quizEnv.questions
         print(quizEnv.questions)
         print(questionLs)
-        curQuestion = questionLs[0]
-        quizEnv.currentQuestion = curQuestion
-        quizEnv.questions.remove(curQuestion)
+
+        if quizEnv.firstQuestion == 'True':
+            curQuestion = quizEnv.currentQuestion
+            quizEnv.firstQuestion = 'False'
+        else:
+            curQuestion = questionLs[0]
+            quizEnv.currentQuestion = curQuestion
+            quizEnv.questions.remove(curQuestion)
 
         thisRoom = data['room']
 
@@ -704,12 +712,14 @@ def onRoomUpdated(roomId):
     print("emitting onRoomUpdated")
     emit("onRoomUpdated", op, to=roomId)
 
-
+# ANCHOR API ENDPOINTS
 #################
 # API ENDPOINTS #
 #################
 
 # test route
+
+
 @app.route('/sm')
 def sm():
     return('API is working', 200)
