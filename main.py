@@ -315,6 +315,7 @@ login_manager.session_protection = "strong"
 def login():
     request_data = request.get_json()
     data = request_data
+    print('login')
     print(session.keys())
     print(session.values())
     print(session.sid)
@@ -346,6 +347,7 @@ def login():
 def socketLogin(data):
     #request_data = request.get_json()
     #data = request_data
+    print('socketLogin')
     print(session.keys())
     print(session.values())
     print(session.sid)
@@ -373,6 +375,8 @@ def socketLogin(data):
                 send("Username or password error")
 
 # logout route
+
+
 @app.route("/api/hostLogout", methods=["POST"])
 @login_required
 def logout():
@@ -413,6 +417,7 @@ def createRoom(data):
     # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
+    print('createRoom')
     print(data)
     print(session.keys())
     print(session.values())
@@ -466,6 +471,7 @@ def on_join(data):
 
 @socketio.on('leave')
 def on_leave(data):
+    print('leave')
     username = data['username']
     room = data['room']
     leave_room(room)
@@ -479,6 +485,7 @@ def on_leave(data):
 @socketio.event
 def submitAnswer(data):
     curUserId = data['userID']
+    print('submitAnswer')
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -502,6 +509,7 @@ def submitAnswer(data):
 @socketio.event
 def startQuiz(data):
     curUserId = data['userID']
+    print('startQuiz')
     print(data.keys())
     print(data.values())
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -551,6 +559,8 @@ def prepareNextQuestion(data):
 @socketio.event
 def sendQuestion(data):
     try:
+        print('sending question')
+        send('question was sent')
         op = {}
         curUserId = data['userID']
         quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -635,9 +645,12 @@ def removeUserFromRoom(roomId, userId):
 def onRoomUpdated(roomId):
     room = ActiveRooms.objects(roomId=roomId).first()
     connectedusers = room.connectedUserId
+    op = []
+    for user in connectedusers:
+        op.append(user)
     room.save()
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", connectedusers, to=roomId)
+    emit("onRoomUpdated", op, to=roomId)
 
 
 #################
