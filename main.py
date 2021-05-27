@@ -580,6 +580,17 @@ def startQuiz(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
+
+        strCurrentTime = datetime.datetime.now()
+        op["currentTime"] = str(strCurrentTime)
+        strFinishQuestion = datetime.datetime.now(
+        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        op["finishQuestion"] = str(strFinishQuestion)
+        print('type of finishQuestion')
+        print(type(op['finishQuestion']))
+        print('finishQuestion')
+        print(op['finishQuestion'])
+
         print('the quizEnv firstQuestion should have been set by now')
         print(quizEnv.currentQuestion)
     except Exception as err:
@@ -648,16 +659,24 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-        op["currentTime"] = datetime.datetime.now()
-        op["finishQuestion"] = datetime.datetime.now(
+        strCurrentTime = datetime.datetime.now()
+        op["currentTime"] = str(strCurrentTime)
+        strFinishQuestion = datetime.datetime.now(
         ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        op["finishQuestion"] = str(strFinishQuestion)
+        print('type of finishQuestion')
+        print(type(op['finishQuestion']))
+        print('finishQuestion')
+        print(op['finishQuestion'])
     except LastQuestion as lqe:
-        print('caught that fact it was the last question for room {lqe}')
+        print(f'caught that fact it was the last question for room {lqe}')
     except Exception:
         print('there was an error')
     else:
-        emit("Question", op, to=thisRoom)
+        print(type(op))
         print(op)
+        emit("Question", op, to=thisRoom)
+        # print(op)
 
 
 @socketio.event
@@ -691,7 +710,7 @@ def addUserToRoom(room, userPK):
     roomObj.save()
     onRoomUpdated(room)
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", connectedusers, to=roomId)
+    #emit("onRoomUpdated", connectedusers, to=roomId)
 
 
 def removeUserFromRoom(roomId, userId):
@@ -732,13 +751,39 @@ def sm():
     op = {}
     timeLimit = int(request.args.get('timeLimit'))
     op["currentTime"] = datetime.datetime.now()
-    op["finishQuestion"] = datetime.datetime.now(
-    ) + datetime.timedelta(seconds=timeLimit)
+    op["finishQuestion"] = str(datetime.datetime.now(
+    ) + datetime.timedelta(seconds=timeLimit))
     return(op, 200)
 
+# GET Users
+
+
+@app.route("/get/users", methods=['GET'])
+def getUsers():
+    requestData = request.get_json()
+
+    def getUserById(id):
+        user = UserType.objects(id=id).first()
+        return user.to_json()
+
+    def getUserByType(type):
+        op = {}
+        for user in UserType.objects(hostOrTest=type):
+            op[user.get_id] = user.to_json()
+        return op
+
+    def getAllUsers():
+        pass
+
+    if 'id' in requestData:
+        return getUserById(requestData=['id'])
+    elif 'type' in requestData:
+        return getUserByType(requestData['type'])
+    else:
+        return getAllUsers()
+
+
 # creates host users
-
-
 @app.route('/create/hostUser', methods=['POST'])
 def createHostUser():
     requestData = request.get_json()
@@ -815,7 +860,7 @@ def checkUserType():
 
 @app.route('/api/questions', methods=['GET'])
 def apiQuestionsGet():
-    getID,categ = request.args.get("id"), request.args.get('category')
+    getID, categ = request.args.get("id"), request.args.get('category')
 
     # Get single question if an ID is passed
     if getID:
@@ -836,7 +881,8 @@ def apiQuestionsGet():
             print(category.assocQuestions)
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(Question.objects(id=questionID).first())
+                op[category.name].append(
+                    Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
