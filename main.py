@@ -675,7 +675,7 @@ def sendQuestion(data):
     else:
         print(type(op))
         print(op)
-        emit("Question", op, to=thisRoom)
+        emit("reveiveQuestion", op, to=thisRoom)
         # print(op)
 
 
@@ -1082,6 +1082,30 @@ def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
     return "success"
+
+
+############################################
+# SERVER TESTING EVENTS AND HTTP ENDPOINTS #
+############################################
+
+@socketio.event
+def startServer7Test():
+    print('server test started')
+    # print(data)
+    print('socket sleeping for 30 seconds')
+    socketio.sleep(30)
+    print('socket waking')
+    emit('ServerTestFinished', 'the server finished testing')
+
+
+@app.route('/server/testing1', methods=['GET'])
+def serverTesting1():
+    print("""
+    #########################
+    # THE SERVER IS TESTING #
+    #########################
+    """)
+    return ('the server can still handle requests')
 
 
 # runs server
