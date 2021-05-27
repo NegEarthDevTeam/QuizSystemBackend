@@ -804,19 +804,9 @@ def checkUserType():
 
 @app.route('/api/questions', methods=['GET'])
 def apiQuestionsGet():
-    getID = request.args.get("id")
+    getID,categ = request.args.get("id"), request.args.get('category')
 
-    request_data = request.get_json()
-
-    catPres, data = False, []
-
-    if request_data != None:
-        catPres = True if "category" in request_data else False
-
-    categ = request.args.get('category')
-
-    catPres = False if categ == 'null' else True
-
+    # Get single question if an ID is passed
     if getID:
         res = Question.objects(id=getID).first()
         if not res:
@@ -824,21 +814,26 @@ def apiQuestionsGet():
         else:
             return make_response(res.to_json(), 200)
 
-    if not catPres:
+    # Return ALL questions if nothing is specified
+    if categ == None:
         return (jsonify(Question.objects), 200)
 
+    # Return a list of all questions in their respective categories
     if categ == '_all_':
         op = {}
         for category in Categories.objects:
-            op[category.name] = category.assocQuestions
+            print(category.assocQuestions)
+            op[category.name] = []
+            for questionID in category.assocQuestions:
+                op[category.name].append(Question.objects(id=questionID).first())
         return op
 
-    question = Question.objects(category=categ).first()
-
+    # Return a list of all questions in a single category
+    question = Question.objects(category=categ)
     if not question:
         return make_response("This category either doesn't exist or has no questions assigned to it", 404)
 
-    return (jsonify(Question.objects(category=categ)), 200)
+    return (jsonify(question), 200)
 
 
 # creates questions
