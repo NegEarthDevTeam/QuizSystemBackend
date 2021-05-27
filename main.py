@@ -675,7 +675,7 @@ def sendQuestion(data):
     else:
         print(type(op))
         print(op)
-        emit("reveiveQuestion", op, to=thisRoom)
+        emit("receiveQuestion", op, to=thisRoom)
         # print(op)
 
 
