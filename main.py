@@ -196,6 +196,7 @@ class Categories(db.Document):
             'name': self.name
         })
 
+    @property
     def assocQuestions(self):
         op = []
         for question in Question.objects:
@@ -214,6 +215,8 @@ class ActiveRooms(db.Document):
     allQuestions = db.ListField()
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
+    lastQuestion = db.StringField()
+    firstQuestion = db.StringField()
 
     def to_json(self):
         return jsonify({
@@ -225,7 +228,9 @@ class ActiveRooms(db.Document):
             'Questions': self.questions,
             'Time Limit': self.timeLimit,
             'Quiz Started': self.quizStarted,
-            'Current Question': self.currentQuestion
+            'Current Question': self.currentQuestion,
+            'lastQuestion': self.lastQuestion,
+            'firstQuestion': self.firstQuestion
         })
 
 
@@ -296,6 +301,17 @@ class NotNegResource(Exception):
     def __str__(self):
         return('You have tried to use a non NEG resource')
 
+
+class LastQuestion(Exception):
+    def __init__(self, message):
+        if message:
+            self.message = message
+        else:
+            pass
+
+    def __str__(self):
+        return('this was the last question in this room')
+
 ############################
 # Authentication Endpoints #
 ############################
@@ -315,6 +331,10 @@ login_manager.session_protection = "strong"
 def login():
     request_data = request.get_json()
     data = request_data
+    print('login')
+    print(session.keys())
+    print(session.values())
+    print(session.sid)
     if 'session' in data:
         session['value'] = data['session']
     elif 'email' in data:
@@ -337,6 +357,38 @@ def login():
                 ), 200)
             else:
                 return(jsonify("Username or password error"), 401)
+
+
+@socketio.on('socketLogin')
+def socketLogin(data):
+    #request_data = request.get_json()
+    #data = request_data
+    print('socketLogin')
+    print(session.keys())
+    print(session.values())
+    print(session.sid)
+    if 'session' in data:
+        session['value'] = data['session']
+    elif 'email' in data:
+        if data['email']:
+            email = data["email"]
+            if 'passwordHash' in data:
+                passwordHash = data["passwordHash"]
+            else:
+                passwordHash = data["email"]
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
+            if userObj:
+                login_user(userObj)
+                userObj.update(lastSignIn=datetime.datetime.now())
+
+                send({
+                    'status': 'success',
+                    'userID': userObj.get_id()
+                }
+                )
+            else:
+                send("Username or password error")
 
 # logout route
 
@@ -381,7 +433,11 @@ def createRoom(data):
     # if current_user.is_authenticated:
     quizId = ''.join(random.choice(string.ascii_lowercase)
                      for i in range(6))
+    print('createRoom')
     print(data)
+    print(session.keys())
+    print(session.values())
+    print(session.sid)
     questions = data['questionIDs']
     timeLimit = data['timeLimit']
     requestUserId = data['userID']
@@ -395,7 +451,9 @@ def createRoom(data):
         allQuestions=questions,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
-        currentQuestion="null"
+        currentQuestion="initiateStr",
+        lastQuestion='initiateStr',
+        firstQuestion='initiatieStr'
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
@@ -431,6 +489,7 @@ def on_join(data):
 
 @socketio.on('leave')
 def on_leave(data):
+    print('leave')
     username = data['username']
     room = data['room']
     leave_room(room)
@@ -444,6 +503,7 @@ def on_leave(data):
 @socketio.event
 def submitAnswer(data):
     curUserId = data['userID']
+    print('submitAnswer')
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -467,11 +527,64 @@ def submitAnswer(data):
 @socketio.event
 def startQuiz(data):
     curUserId = data['userID']
+    print('startQuiz')
+    print(data.keys())
+    print(data.values())
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
-    quizEnv.quizStarted = "True"
+    quizEnv.quizStarted = 'True'
     quizEnv.save()
-    print("quiz started")
-    emit("complete")
+
+    try:
+        op = {}
+        roomId = data['room']
+        print(f"var room Id {roomId}")
+        quizEnv = ActiveRooms.objects(roomId=roomId).first()
+        questionLs = quizEnv.questions
+        print(f"quizEnv roomId {quizEnv.roomId}")
+        print(quizEnv.questions)
+        print(f"request.sid is {request.sid}")
+        curQuestion = questionLs[0]
+        quizEnv.currentQuestion = curQuestion
+        quizEnv.questions.remove(curQuestion)
+        quizEnv.firstQuestion = 'True'
+        quizEnv.save()
+
+        if quizEnv.lastQuestion == 'True':
+            print('was last question')
+            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
+
+        print(f"questions list length is {len(quizEnv.questions)}")
+        print(quizEnv.questions)
+        if len(quizEnv.questions) == 0:
+            print('lastQuestion = True')
+            op['lastQuestion'] = "True"
+            quizEnv.lastQuestion = 'True'
+        else:
+            print('lastQuestion = False')
+            op['lastQuestion'] = "False"
+            quizEnv.lastQuestion = 'False'
+
+        quizEnv.save()
+
+        questionObj = Question.objects(id=curQuestion).first()
+
+        if questionObj.questionType == "multiple":
+            possAnswers = questionObj.poll + questionObj.answer
+            random.shuffle(possAnswers)
+            op["possAnswers"] = possAnswers
+            op["answerQty"] = len(questionObj.answer)
+
+        op["questionType"] = questionObj.questionType
+        op["title"] = questionObj.title
+        op["bodyMD"] = questionObj.bodyMD
+        print('the quizEnv firstQuestion should have been set by now')
+        print(quizEnv.currentQuestion)
+    except Exception as err:
+        print('there was an error')
+        print(err)
+        send('There where no questions in this quiz')
+    else:
+        print(op)
 
 
 @socketio.event
@@ -481,34 +594,64 @@ def prepareNextQuestion(data):
 
 @socketio.event
 def sendQuestion(data):
-    op = {}
-    curUserId = data['userID']
-    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
-    questionLs = quizEnv.questions
-    curQuestion = questionLs[0]
-    quizEnv.currentQuestion = curQuestion
-    quizEnv.questions.remove(curQuestion)
-    quizEnv.save()
+    try:
+        print('sendQuestionEvent')
+        send('question was sent')
+        op = {}
+        roomId = data['room']
+        print(roomId)
+        quizEnv = ActiveRooms.objects(roomId=roomId).first()
+        print(quizEnv.roomId)
+        if quizEnv.lastQuestion == 'True':
+            print('was last question')
+            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
-    thisRoom=data['room']
+        print(f"questions list length is {len(quizEnv.questions)}")
+        print(quizEnv.questions)
 
-    if len(questionLs) == 0:
-        op['lastQuestion'] = "True"
+        questionLs = quizEnv.questions
+        print(quizEnv.questions)
+        print(questionLs)
+
+        if quizEnv.firstQuestion == 'True':
+            curQuestion = quizEnv.currentQuestion
+            quizEnv.firstQuestion = 'False'
+        else:
+            curQuestion = questionLs[0]
+            quizEnv.currentQuestion = curQuestion
+            quizEnv.questions.remove(curQuestion)
+
+        thisRoom = data['room']
+
+        if len(quizEnv.questions) == 0:
+            print('lastQuestion = True')
+            op['lastQuestion'] = "True"
+            quizEnv.lastQuestion = 'True'
+        else:
+            print('lastQuestion = False')
+            op['lastQuestion'] = "False"
+            quizEnv.lastQuestion = 'False'
+
+        quizEnv.save()
+
+        questionObj = Question.objects(id=curQuestion).first()
+
+        if questionObj.questionType == "multiple":
+            possAnswers = questionObj.poll + questionObj.answer
+            random.shuffle(possAnswers)
+            op["possAnswers"] = possAnswers
+            op["answerQty"] = len(questionObj.answer)
+
+        op["questionType"] = questionObj.questionType
+        op["title"] = questionObj.title
+        op["bodyMD"] = questionObj.bodyMD
+    except LastQuestion:
+        print('caught that fact it was the last question')
+    except Exception:
+        print('there was an error')
     else:
-        op['lastQuestion'] = "False"
-    questionObj = Question.objects(id=curQuestion).first()
-
-    if questionObj.questionType == "multiple":
-        possAnswers = questionObj.poll + questionObj.answer
-        random.shuffle(possAnswers)
-        op["possAnswers"] = possAnswer
-        op["answerQty"] = len(questionObj.answer)
-    
-    op["questionType"] = questionObj.questionType
-    op["title"] = questionObj.title
-    op["bodyMD"] = questionObj.bodyMD
-    emit("Question", op,to=thisRoom)
-    print(op)
+        emit("Question", op, to=thisRoom)
+        print(op)
 
 
 @socketio.event
@@ -562,16 +705,22 @@ def removeUserFromRoom(roomId, userId):
 def onRoomUpdated(roomId):
     room = ActiveRooms.objects(roomId=roomId).first()
     connectedusers = room.connectedUserId
+    op = []
+    for user in connectedusers:
+        userObj = UserType.objects(id=user).first()
+        op.append(userObj.firstName)
     room.save()
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", connectedusers, to=roomId)
+    emit("onRoomUpdated", op, to=roomId)
 
-
+# ANCHOR API ENDPOINTS
 #################
 # API ENDPOINTS #
 #################
 
 # test route
+
+
 @app.route('/sm')
 def sm():
     return('API is working', 200)
@@ -658,28 +807,38 @@ def apiQuestionsGet():
     getID = request.args.get("id")
 
     request_data = request.get_json()
+
     catPres, data = False, []
 
     if request_data != None:
         catPres = True if "category" in request_data else False
 
+    categ = request.args.get('category')
+
+    catPres = False if categ == 'null' else True
+
     if getID:
         res = Question.objects(id=getID).first()
         if not res:
-            return make_response({"error": res}, 404)
+            return make_response({"error pos 1": res}, 404)
         else:
             return make_response(res.to_json(), 200)
 
     if not catPres:
         return (jsonify(Question.objects), 200)
 
-    cat = request_data["category"]
-    question = Question.objects(category=cat).first()
+    if categ == '_all_':
+        op = {}
+        for category in Categories.objects:
+            op[category.name] = category.assocQuestions
+        return op
+
+    question = Question.objects(category=categ).first()
 
     if not question:
-        return make_response({"error": question}, 404)
+        return make_response("This category either doesn't exist or has no questions assigned to it", 404)
 
-    return (jsonify(Question.objects(category=cat)), 200)
+    return (jsonify(Question.objects(category=categ)), 200)
 
 
 # creates questions
@@ -830,7 +989,9 @@ def set():
 
 @app.route('/get/', methods=['GET'])
 def get():
-    return (f"{session.get('theID', 'was not set')} + {current_user.firstName} + {current_user.lastName}")
+    yolo = request.args.get('doesnei')
+    print(yolo)
+    return(jsonify(yolo))
 
 
 @app.route('/SAM/api/login', methods=['GET', 'POST'])
@@ -843,6 +1004,7 @@ def samCustomLogin():
         })
     data = request.get_json()
     if 'session' in data:
+        print('session in data')
         session['value'] = data['session']
     elif 'email' in data:
         if data['email']:
@@ -851,10 +1013,15 @@ def samCustomLogin():
             userObj = UserType.objects(
                 email=email, passwordHash=passwordHash).first()
             login_user(userObj)
+            print('login')
+            print(session.keys())
+            print(session.values())
             return('login')
         else:
             logout_user()
+            print('logout')
             return('logout')
+    print('things didnt go to plan')
     return '', 204
 
 
