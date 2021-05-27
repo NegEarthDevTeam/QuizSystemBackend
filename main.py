@@ -439,6 +439,9 @@ def createRoom(data):
     print(session.values())
     print(session.sid)
     questions = data['questionIDs']
+    if len(questions) == 0:
+        print("questions len was 0")
+        return("error", 400)
     timeLimit = data['timeLimit']
     requestUserId = data['userID']
     quizStarted = 'False'
@@ -604,7 +607,7 @@ def sendQuestion(data):
         print(quizEnv.roomId)
         if quizEnv.lastQuestion == 'True':
             print('was last question')
-            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
+            raise LastQuestion(quizEnv.roomId)
 
         print(f"questions list length is {len(quizEnv.questions)}")
         print(quizEnv.questions)
@@ -645,8 +648,11 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-    except LastQuestion:
-        print('caught that fact it was the last question')
+        op["currentTime"] = datetime.datetime.now()
+        op["finishQuestion"] = datetime.datetime.now(
+        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+    except LastQuestion as lqe:
+        print('caught that fact it was the last question for room {lqe}')
     except Exception:
         print('there was an error')
     else:
@@ -723,7 +729,12 @@ def onRoomUpdated(roomId):
 
 @app.route('/sm')
 def sm():
-    return('API is working', 200)
+    op = {}
+    timeLimit = int(request.args.get('timeLimit'))
+    op["currentTime"] = datetime.datetime.now()
+    op["finishQuestion"] = datetime.datetime.now(
+    ) + datetime.timedelta(seconds=timeLimit)
+    return(op, 200)
 
 # creates host users
 
