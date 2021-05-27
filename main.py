@@ -738,14 +738,12 @@ def onRoomUpdated(roomId):
     print("emitting onRoomUpdated")
     emit("onRoomUpdated", op, to=roomId)
 
-# ANCHOR API ENDPOINTS
+
 #################
 # API ENDPOINTS #
 #################
 
 # test route
-
-
 @app.route('/sm')
 def sm():
     op = {}
@@ -763,24 +761,41 @@ def getUsers():
     requestData = request.get_json()
 
     def getUserById(id):
+        print('getUserById')
         user = UserType.objects(id=id).first()
-        return user.to_json()
+        return user
 
     def getUserByType(type):
-        op = {}
+        print('getUserByType')
+        op2 = {}
         for user in UserType.objects(hostOrTest=type):
-            op[user.get_id] = user.to_json()
-        return op
+            op2[user.get_id()] = UserType.objects(id=str(user.pk)).first()
+        return op2
 
     def getAllUsers():
-        pass
+        print('getAllUsers')
+        print(UserType.objects)
+        op3 = {}
+        for user in UserType.objects:
+            op3[user.get_id()] = UserType.objects(id=str(user.pk)).first()
+        print(op3)
+        return op3
+
+    if not requestData:
+        return getAllUsers()
+
+    if 'id' in requestData and 'type' in requestData:
+        return('there was an error with your request', 400)
 
     if 'id' in requestData:
-        return getUserById(requestData=['id'])
+        op = getUserById(requestData['id'])
     elif 'type' in requestData:
-        return getUserByType(requestData['type'])
+        op = getUserByType(requestData['type'])
     else:
-        return getAllUsers()
+        op = getAllUsers()
+
+    print(op)
+    return(jsonify(op))
 
 
 # creates host users
