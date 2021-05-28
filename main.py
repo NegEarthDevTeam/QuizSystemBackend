@@ -505,8 +505,11 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
+
+    print(data)
     curUserId = data['userID']
     print('submitAnswer')
+    roomId = data['room']
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -522,6 +525,17 @@ def submitAnswer(data):
         markedDateTimeStr='None'
     )
     thisAnswer.save()
+    # checks to see if this answer was the last one for the quizEnv
+    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
+    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+
+    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
+        emit('questionTimeout', to=roomId)
+        print('emiting')
+    else:
+        print('still more users to answer')
+
+    return 'yis'
 
 # Send Question to quizspace
 # namespace is implied from the originating event
@@ -676,6 +690,8 @@ def sendQuestion(data):
         print(type(op))
         print(op)
         emit("receiveQuestion", op, to=thisRoom)
+        socketio.sleep(quizEnv.timeLimit)
+        emit('questionTimeout', to=thisRoom)
         # print(op)
 
 
@@ -762,14 +778,15 @@ def getUsers():
 
     def getUserById(id):
         print('getUserById')
-        user = UserType.objects(id=id).first()
+        user = UserType.objects(id=id).exclude('passwordHash').first()
         return user
 
     def getUserByType(type):
         print('getUserByType')
         op2 = {}
         for user in UserType.objects(hostOrTest=type):
-            op2[user.get_id()] = UserType.objects(id=str(user.pk)).first()
+            op2[user.get_id()] = UserType.objects(
+                id=str(user.pk)).exclude('passwordHash').first()
         return op2
 
     def getAllUsers():
@@ -777,7 +794,8 @@ def getUsers():
         print(UserType.objects)
         op3 = {}
         for user in UserType.objects:
-            op3[user.get_id()] = UserType.objects(id=str(user.pk)).first()
+            op3[user.get_id()] = UserType.objects(
+                id=str(user.pk)).exclude('passwordHash').first()
         print(op3)
         return op3
 
@@ -1121,6 +1139,41 @@ def serverTesting1():
     #########################
     """)
     return ('the server can still handle requests')
+
+
+@app.route('/submit/answer', methods=['POST'])
+def submitAnswer():
+    data = request.get_json()
+    print(data)
+    curUserId = data['userID']
+    print('submitAnswer')
+    roomId = data['room']
+    print(data)
+    print(curUserId)
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+
+    thisAnswer = Quenswers(
+        userId=curUserId,
+        questionId=quizEnv.currentQuestion,
+        answer=data['answer'],
+        submitDateTime=datetime.datetime.now(),
+        quizEnvId=str(quizEnv.pk),
+        quizId="None",
+        markedBy="None",
+        markedDateTimeStr='None'
+    )
+    thisAnswer.save()
+    # checks to see if this answer was the last one for the quizEnv
+    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
+    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+
+    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
+        emit('questionTimeout', to=roomId)
+        print('emiting')
+    else:
+        print('still more users to answer')
+
+    return 'yis'
 
 
 # runs server
