@@ -3,10 +3,12 @@ from warnings import catch_warnings
 import logic
 import random
 import string
+import math
 from flask_mongoengine import *
 from flask_socketio import SocketIO, emit, send, join_room, leave_room, close_room
 from flask import *
 import datetime
+import time
 from flask_login import (
     current_user,
     LoginManager,
@@ -431,13 +433,15 @@ def forward():
 def createRoom(data):
     #print(session.get('currentUser', 'user not found'))
     # if current_user.is_authenticated:
-    quizId = ''.join(random.choice(string.ascii_lowercase)
+    quizId = ''.join(random.choice(string.ascii_uppercase)
                      for i in range(6))
-    print('createRoom')
+    print('!!!!! CreateRoom endpoint hit')
+    '''
     print(data)
     print(session.keys())
     print(session.values())
     print(session.sid)
+    '''
     questions = data['questionIDs']
     if len(questions) == 0:
         print("questions len was 0")
@@ -460,8 +464,8 @@ def createRoom(data):
     )
     activeRooms.save()
     print(f'room created with quiz ID: {quizId}')
-    #emit('id', f'ID {quizId}', namespace='/', )
-
+    emit('id', f'ID {quizId}', namespace='/', )
+    join_room(quizId)       
     return(quizId)
 
 
@@ -474,18 +478,23 @@ def on_join(data):
     userPk = data['userID']
 
     roomObj = ActiveRooms.objects(roomId=room).first()
-    print('the join event was run')
+    print('!!!!! Join endpoint hit')
+    '''
     print(data.keys())
     print(data.values())
+    '''
     emit('joinRoom', roomObj.timeLimit)
 
     roomObj.connectedUserId.append(userPk)
     roomObj.allConnectedUsers.append(userPk)
     roomObj.save()
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", roomObj.connectedUserId, to=room)
-    emit("event", )
-    return True
+    thisNewUser = UserType.objects(id=userPk).first()
+    newUserName = thisNewUser.firstName + " " + thisNewUser.lastName
+    tempArray = [UserType.objects(id=id).first().firstName + " " + UserType.objects(id=id).first().lastName for id in roomObj.connectedUserId]
+    print(tempArray)
+    emit("onRoomUpdated", newUserName, to=room)
+    return (tempArray,roomObj.timeLimit)
 
 # exit room
 
@@ -583,6 +592,8 @@ def startQuiz(data):
 
         quizEnv.save()
 
+        '''
+
         questionObj = Question.objects(id=curQuestion).first()
 
         if questionObj.questionType == "multiple":
@@ -607,10 +618,11 @@ def startQuiz(data):
 
         print('the quizEnv firstQuestion should have been set by now')
         print(quizEnv.currentQuestion)
+        '''
     except Exception as err:
         print('there was an error')
         print(err)
-        send('There where no questions in this quiz')
+        send('There were no questions in this quiz')
     else:
         print(op)
 
@@ -673,11 +685,15 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-        strCurrentTime = datetime.datetime.now()
-        op["currentTime"] = str(strCurrentTime)
-        strFinishQuestion = datetime.datetime.now(
-        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
-        op["finishQuestion"] = str(strFinishQuestion)
+        # strCurrentTime = datetime.datetime.now()
+        # op["currentTime"] = str(strCurrentTime)
+        # strFinishQuestion = datetime.datetime.now(
+        # ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        # op["finishQuestion"] = str(strFinishQuestion)
+        op["finishQuestion"] = math.floor((time.time_ns()/1000000) + quizEnv.timeLimit*1000)
+        tempUnixTime = time.time_ns()/1000000
+        print(f'Value of unix time (in ms): {tempUnixTime}');
+        print(f'Value of "time limit": {quizEnv.timeLimit}');
         print('type of finishQuestion')
         print(type(op['finishQuestion']))
         print('finishQuestion')
