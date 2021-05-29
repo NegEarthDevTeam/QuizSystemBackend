@@ -809,7 +809,7 @@ def sm():
 
 @app.route("/get/users", methods=["GET"])
 def getUsers():
-    requestData = request.get_json()
+    reqID,reqType = request.args.get("id"), request.args.get("type")
 
     def getUserById(id):
         print("getUserById")
@@ -818,11 +818,9 @@ def getUsers():
 
     def getUserByType(type):
         print("getUserByType")
-        op2 = {}
+        op2 = []
         for user in UserType.objects(hostOrTest=type):
-            op2[user.get_id()] = (
-                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
-            )
+            op2.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
         return op2
 
     def getAllUsers():
@@ -836,21 +834,16 @@ def getUsers():
         print(op3)
         return op3
 
-    if not requestData:
-        return getAllUsers()
+    if reqID and reqType:
+        return ("Cannot filter by both type and ID.",400)
 
-    if "id" in requestData and "type" in requestData:
-        return ("there was an error with your request", 400)
+    if reqID:
+        return jsonify(getUserById(reqID))
 
-    if "id" in requestData:
-        op = getUserById(requestData["id"])
-    elif "type" in requestData:
-        op = getUserByType(requestData["type"])
-    else:
-        op = getAllUsers()
+    if reqType:
+        return jsonify(getUserByType(reqType))
 
-    print(op)
-    return jsonify(op)
+    return jsonify(getAllUsers())
 
 
 # creates host users
