@@ -721,7 +721,6 @@ def sendQuestion(data):
         socketio.sleep(quizEnv.timeLimit)
         print("server woke, emiting timeout")
         emit("questionTimeout", to=thisRoom)
-
         # print(op)
 
 
@@ -793,13 +792,7 @@ def onRoomUpdated(roomId):
 # test route
 @app.route("/sm")
 def sm():
-    op = {}
-    timeLimit = int(request.args.get("timeLimit"))
-    op["currentTime"] = datetime.datetime.now()
-    op["finishQuestion"] = str(
-        datetime.datetime.now() + datetime.timedelta(seconds=timeLimit)
-    )
-    return (op, 200)
+    return ("yep", 200)
 
 
 # GET Users
