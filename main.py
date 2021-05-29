@@ -629,6 +629,8 @@ def startQuiz(data):
         print("finishQuestion")
         print(op["finishQuestion"])
 
+        emit('startedQuiz',(len(questionLs)),to=roomId)
+
         print("the quizEnv firstQuestion should have been set by now")
         print(quizEnv.currentQuestion)
     except Exception as err:
