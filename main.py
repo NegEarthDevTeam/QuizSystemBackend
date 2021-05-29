@@ -690,9 +690,8 @@ def sendQuestion(data):
         # strFinishQuestion = datetime.datetime.now(
         # ) + datetime.timedelta(seconds=quizEnv.timeLimit)
         # op["finishQuestion"] = str(strFinishQuestion)
-        op["finishQuestion"] = math.floor((time.time_ns()/1000000) + quizEnv.timeLimit*1000)
-        tempUnixTime = time.time_ns()/1000000
-        print(f'Value of unix time (in ms): {tempUnixTime}');
+        tempUnixTimeInMS = time.time_ns()/1000000
+        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit*1000)
         print(f'Value of "time limit": {quizEnv.timeLimit}');
         print('type of finishQuestion')
         print(type(op['finishQuestion']))
