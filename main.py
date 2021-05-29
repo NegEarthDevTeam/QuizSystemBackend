@@ -522,19 +522,20 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
-
+    print("data")
     print(data)
     curUserId = data["userID"]
     print("submitAnswer")
-    roomId = data["room"]
+    roomId = data["room"]["roomCode"]
+    print(f"roomID: {roomId}")
     print(data)
     print(curUserId)
-    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    quizEnv = ActiveRooms.objects(roomId=roomId).first()
 
     thisAnswer = Quenswers(
-        userId=curUserId,
+        userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["answer"],
+        answer=str(data["Answer"]),
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId="None",
@@ -552,7 +553,7 @@ def submitAnswer(data):
         == 0
     ):
         emit("questionTimeout", to=roomId)
-        print("emiting")
+        print("emiting timeout")
     else:
         print("still more users to answer")
 
@@ -716,8 +717,11 @@ def sendQuestion(data):
         print(type(op))
         print(op)
         emit("receiveQuestion", op, to=thisRoom)
+        print(f"server sleeping for {quizEnv.timeLimit} seconds")
         socketio.sleep(quizEnv.timeLimit)
+        print("server woke, emiting timeout")
         emit("questionTimeout", to=thisRoom)
+
         # print(op)
 
 
