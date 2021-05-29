@@ -439,6 +439,9 @@ def createRoom(data):
     print(session.values())
     print(session.sid)
     questions = data['questionIDs']
+    if len(questions) == 0:
+        print("questions len was 0")
+        return("error", 400)
     timeLimit = data['timeLimit']
     requestUserId = data['userID']
     quizStarted = 'False'
@@ -502,8 +505,11 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
+
+    print(data)
     curUserId = data['userID']
     print('submitAnswer')
+    roomId = data['room']
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -519,6 +525,17 @@ def submitAnswer(data):
         markedDateTimeStr='None'
     )
     thisAnswer.save()
+    # checks to see if this answer was the last one for the quizEnv
+    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
+    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+
+    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
+        emit('questionTimeout', to=roomId)
+        print('emiting')
+    else:
+        print('still more users to answer')
+
+    return 'yis'
 
 # Send Question to quizspace
 # namespace is implied from the originating event
@@ -577,6 +594,17 @@ def startQuiz(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
+
+        strCurrentTime = datetime.datetime.now()
+        op["currentTime"] = str(strCurrentTime)
+        strFinishQuestion = datetime.datetime.now(
+        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        op["finishQuestion"] = str(strFinishQuestion)
+        print('type of finishQuestion')
+        print(type(op['finishQuestion']))
+        print('finishQuestion')
+        print(op['finishQuestion'])
+
         print('the quizEnv firstQuestion should have been set by now')
         print(quizEnv.currentQuestion)
     except Exception as err:
@@ -604,7 +632,7 @@ def sendQuestion(data):
         print(quizEnv.roomId)
         if quizEnv.lastQuestion == 'True':
             print('was last question')
-            raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
+            raise LastQuestion(quizEnv.roomId)
 
         print(f"questions list length is {len(quizEnv.questions)}")
         print(quizEnv.questions)
@@ -645,13 +673,26 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-    except LastQuestion:
-        print('caught that fact it was the last question')
+        strCurrentTime = datetime.datetime.now()
+        op["currentTime"] = str(strCurrentTime)
+        strFinishQuestion = datetime.datetime.now(
+        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        op["finishQuestion"] = str(strFinishQuestion)
+        print('type of finishQuestion')
+        print(type(op['finishQuestion']))
+        print('finishQuestion')
+        print(op['finishQuestion'])
+    except LastQuestion as lqe:
+        print(f'caught that fact it was the last question for room {lqe}')
     except Exception:
         print('there was an error')
     else:
-        emit("Question", op, to=thisRoom)
+        print(type(op))
         print(op)
+        emit("receiveQuestion", op, to=thisRoom)
+        socketio.sleep(quizEnv.timeLimit)
+        emit('questionTimeout', to=thisRoom)
+        # print(op)
 
 
 @socketio.event
@@ -685,7 +726,7 @@ def addUserToRoom(room, userPK):
     roomObj.save()
     onRoomUpdated(room)
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", connectedusers, to=roomId)
+    #emit("onRoomUpdated", connectedusers, to=roomId)
 
 
 def removeUserFromRoom(roomId, userId):
@@ -713,21 +754,69 @@ def onRoomUpdated(roomId):
     print("emitting onRoomUpdated")
     emit("onRoomUpdated", op, to=roomId)
 
-# ANCHOR API ENDPOINTS
+
 #################
 # API ENDPOINTS #
 #################
 
 # test route
-
-
 @app.route('/sm')
 def sm():
-    return('API is working', 200)
+    op = {}
+    timeLimit = int(request.args.get('timeLimit'))
+    op["currentTime"] = datetime.datetime.now()
+    op["finishQuestion"] = str(datetime.datetime.now(
+    ) + datetime.timedelta(seconds=timeLimit))
+    return(op, 200)
+
+# GET Users
+
+
+@app.route("/get/users", methods=['GET'])
+def getUsers():
+    requestData = request.get_json()
+
+    def getUserById(id):
+        print('getUserById')
+        user = UserType.objects(id=id).exclude('passwordHash').first()
+        return user
+
+    def getUserByType(type):
+        print('getUserByType')
+        op2 = {}
+        for user in UserType.objects(hostOrTest=type):
+            op2[user.get_id()] = UserType.objects(
+                id=str(user.pk)).exclude('passwordHash').first()
+        return op2
+
+    def getAllUsers():
+        print('getAllUsers')
+        print(UserType.objects)
+        op3 = {}
+        for user in UserType.objects:
+            op3[user.get_id()] = UserType.objects(
+                id=str(user.pk)).exclude('passwordHash').first()
+        print(op3)
+        return op3
+
+    if not requestData:
+        return getAllUsers()
+
+    if 'id' in requestData and 'type' in requestData:
+        return('there was an error with your request', 400)
+
+    if 'id' in requestData:
+        op = getUserById(requestData['id'])
+    elif 'type' in requestData:
+        op = getUserByType(requestData['type'])
+    else:
+        op = getAllUsers()
+
+    print(op)
+    return(jsonify(op))
+
 
 # creates host users
-
-
 @app.route('/create/hostUser', methods=['POST'])
 def createHostUser():
     requestData = request.get_json()
@@ -804,7 +893,7 @@ def checkUserType():
 
 @app.route('/api/questions', methods=['GET'])
 def apiQuestionsGet():
-    getID,categ = request.args.get("id"), request.args.get('category')
+    getID, categ = request.args.get("id"), request.args.get('category')
 
     # Get single question if an ID is passed
     if getID:
@@ -825,7 +914,8 @@ def apiQuestionsGet():
             print(category.assocQuestions)
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(Question.objects(id=questionID).first())
+                op[category.name].append(
+                    Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1025,6 +1115,65 @@ def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
     return "success"
+
+
+############################################
+# SERVER TESTING EVENTS AND HTTP ENDPOINTS #
+############################################
+
+@socketio.event
+def startServer7Test():
+    print('server test started')
+    # print(data)
+    print('socket sleeping for 30 seconds')
+    socketio.sleep(30)
+    print('socket waking')
+    emit('ServerTestFinished', 'the server finished testing')
+
+
+@app.route('/server/testing1', methods=['GET'])
+def serverTesting1():
+    print("""
+    #########################
+    # THE SERVER IS TESTING #
+    #########################
+    """)
+    return ('the server can still handle requests')
+
+
+@app.route('/submit/answer', methods=['POST'])
+def submitAnswer():
+    data = request.get_json()
+    print(data)
+    curUserId = data['userID']
+    print('submitAnswer')
+    roomId = data['room']
+    print(data)
+    print(curUserId)
+    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+
+    thisAnswer = Quenswers(
+        userId=curUserId,
+        questionId=quizEnv.currentQuestion,
+        answer=data['answer'],
+        submitDateTime=datetime.datetime.now(),
+        quizEnvId=str(quizEnv.pk),
+        quizId="None",
+        markedBy="None",
+        markedDateTimeStr='None'
+    )
+    thisAnswer.save()
+    # checks to see if this answer was the last one for the quizEnv
+    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
+    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+
+    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
+        emit('questionTimeout', to=roomId)
+        print('emiting')
+    else:
+        print('still more users to answer')
+
+    return 'yis'
 
 
 # runs server
