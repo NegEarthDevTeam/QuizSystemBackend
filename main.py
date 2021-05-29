@@ -3,8 +3,10 @@ from warnings import catch_warnings
 import logic
 import random
 import string
+import math
+import time
 from flask_mongoengine import *
-from flask_socketio import SocketIO, emit, send, join_room, leave_room, close_room
+from flask_socketio import *
 from flask import *
 import datetime
 from flask_login import (
@@ -16,6 +18,7 @@ from flask_login import (
     login_required,
 )
 from flask_session import Session
+
 global db
 
 app = Flask(__name__)
@@ -24,13 +27,13 @@ app = Flask(__name__)
 app.config["MONGODB_SETTINGS"] = {
     "db": "quizsystemdb",
     "host": "localhost",
-    "port": 27017
+    "port": 27017,
 }
 db = MongoEngine(app)
 
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SECRET_KEY'] = 'quizSystemSecretKey'
-#app.config['SESSION_PERMANENT'] = False
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SECRET_KEY"] = "quizSystemSecretKey"
+# app.config['SESSION_PERMANENT'] = False
 
 login_manager = LoginManager(app)
 Session(app)
@@ -38,7 +41,7 @@ Session(app)
 app.secret_key = "quizSystemSecretKey"
 
 
-socketio = SocketIO(app, cors_allowed_origins='*', manage_session=False)
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
 
 
 #####################
@@ -56,14 +59,16 @@ class HostUser(db.Document):
     lastSignIn = db.DateTimeField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'First Name': self.firstName,
-            'Last Name': self.lastName,
-            'Email': self.email,
-            'Creation Date': self.created,
-            'Edit Date': self.lastEdit
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "First Name": self.firstName,
+                "Last Name": self.lastName,
+                "Email": self.email,
+                "Creation Date": self.created,
+                "Edit Date": self.lastEdit,
+            }
+        )
 
     def is_authenticated(self):
         return True
@@ -84,12 +89,14 @@ class TestUser(db.Document):
     lastEdit = datetime.datetime.now()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'Email': self.email,
-            'Creation Date': self.created,
-            'Edit Date': self.lastEdit
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "Email": self.email,
+                "Creation Date": self.created,
+                "Edit Date": self.lastEdit,
+            }
+        )
 
 
 class UserType(db.Document):
@@ -103,16 +110,18 @@ class UserType(db.Document):
     hostOrTest = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'First Name': self.firstName,
-            'Last Name': self.lastName,
-            'Email': self.email,
-            'Creation Date': self.created,
-            'Edit Date': self.lastEdit,
-            'Last Sign In': self.lastSignIn,
-            'hostOrTest': self.hostOrTest
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "First Name": self.firstName,
+                "Last Name": self.lastName,
+                "Email": self.email,
+                "Creation Date": self.created,
+                "Edit Date": self.lastEdit,
+                "Last Sign In": self.lastSignIn,
+                "hostOrTest": self.hostOrTest,
+            }
+        )
 
     def is_authenticated(self):
         return True
@@ -135,7 +144,7 @@ class UserType(db.Document):
 
     @property
     def test(self):
-        if self.hostOrTest == 'test':
+        if self.hostOrTest == "test":
             return True
         else:
             return False
@@ -151,16 +160,18 @@ class Quizzes(db.Document):
     activeRoomId = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'Room ID': self.roomId,
-            'All Time Connected Users': self.allConnectedUsers,
-            'Date and Time of Creation': self.dateTime,
-            'Quiz Completed Successfully': self.quizCompletedSuccessfully,
-            'Questions': self.questions,
-            'Time Limit': self.timeLimit,
-            'Active Room Object Id': self.activeRoomId
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "Room ID": self.roomId,
+                "All Time Connected Users": self.allConnectedUsers,
+                "Date and Time of Creation": self.dateTime,
+                "Quiz Completed Successfully": self.quizCompletedSuccessfully,
+                "Questions": self.questions,
+                "Time Limit": self.timeLimit,
+                "Active Room Object Id": self.activeRoomId,
+            }
+        )
 
 
 class Question(db.Document):
@@ -174,27 +185,26 @@ class Question(db.Document):
     imageURL = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'Category': self.category,
-            'Question Type': self.questionType,
-            'Answer': self.answer,
-            'Poll': self.poll,
-            'Title': self.title,
-            'Body MD': self.bodyMD,
-            'Image URL': self.imageURL,
-            'VideoURL': self.videoURL,
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "Category": self.category,
+                "Question Type": self.questionType,
+                "Answer": self.answer,
+                "Poll": self.poll,
+                "Title": self.title,
+                "Body MD": self.bodyMD,
+                "Image URL": self.imageURL,
+                "VideoURL": self.videoURL,
+            }
+        )
 
 
 class Categories(db.Document):
     name = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'name': self.name
-        })
+        return jsonify({"_id": str(self.pk), "name": self.name})
 
     @property
     def assocQuestions(self):
@@ -219,19 +229,21 @@ class ActiveRooms(db.Document):
     firstQuestion = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'Room ID': self.roomId,
-            'Connected User IDs': self.connectedUserId,
-            'All Time Connected Users': self.allConnectedUsers,
-            'Date and Time of Creation': self.dateTime,
-            'Questions': self.questions,
-            'Time Limit': self.timeLimit,
-            'Quiz Started': self.quizStarted,
-            'Current Question': self.currentQuestion,
-            'lastQuestion': self.lastQuestion,
-            'firstQuestion': self.firstQuestion
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "Room ID": self.roomId,
+                "Connected User IDs": self.connectedUserId,
+                "All Time Connected Users": self.allConnectedUsers,
+                "Date and Time of Creation": self.dateTime,
+                "Questions": self.questions,
+                "Time Limit": self.timeLimit,
+                "Quiz Started": self.quizStarted,
+                "Current Question": self.currentQuestion,
+                "lastQuestion": self.lastQuestion,
+                "firstQuestion": self.firstQuestion,
+            }
+        )
 
 
 class Quenswers(db.Document):
@@ -245,17 +257,19 @@ class Quenswers(db.Document):
     markedDateTimeStr = db.StringField()
 
     def to_json(self):
-        return jsonify({
-            '_id': str(self.pk),
-            'User ID': self.userId,
-            'Question ID': self.questionId,
-            'Answer': self.answer,
-            'Submit Date Time': self.submitDateTime,
-            'Quiz Environment ID': self.quizEnvId,
-            'Quiz OBJ ID': self.quizId,
-            'Marker ID': self.markedBy,
-            'Marked Date Time String': self.markedDateTimeStr
-        })
+        return jsonify(
+            {
+                "_id": str(self.pk),
+                "User ID": self.userId,
+                "Question ID": self.questionId,
+                "Answer": self.answer,
+                "Submit Date Time": self.submitDateTime,
+                "Quiz Environment ID": self.quizEnvId,
+                "Quiz OBJ ID": self.quizId,
+                "Marker ID": self.markedBy,
+                "Marked Date Time String": self.markedDateTimeStr,
+            }
+        )
 
 
 # '' : self. ,
@@ -264,31 +278,32 @@ class Quenswers(db.Document):
 # Custom Errors #
 #################
 
+
 class BadRequestError(Exception):
     def __init__(self):
         pass
 
     def __str__(self):
-        return ('The request was bad')
+        return "The request was bad"
 
 
 class ResourceNotFound(Exception):
     def __init__(self, **kwargs):
-        self.resourceType = kwargs['resourceType']
+        self.resourceType = kwargs["resourceType"]
 
     def __str__(self):
-        if self.resourceType == 'hostUser':
-            return ('Host user not found')
-        if self.resourceType == 'testUser':
-            return('Test user not found')
-        if self.resourceType == 'user':
-            return('User not found')
-        if self.resourceType == 'quiz':
-            return('Quiz not found')
-        if self.resourceType == 'question':
-            return('Question not found')
-        if self.resourceType == 'category':
-            return('Category not found')
+        if self.resourceType == "hostUser":
+            return "Host user not found"
+        if self.resourceType == "testUser":
+            return "Test user not found"
+        if self.resourceType == "user":
+            return "User not found"
+        if self.resourceType == "quiz":
+            return "Quiz not found"
+        if self.resourceType == "question":
+            return "Question not found"
+        if self.resourceType == "category":
+            return "Category not found"
 
 
 class NotNegResource(Exception):
@@ -299,7 +314,7 @@ class NotNegResource(Exception):
             pass
 
     def __str__(self):
-        return('You have tried to use a non NEG resource')
+        return "You have tried to use a non NEG resource"
 
 
 class LastQuestion(Exception):
@@ -310,7 +325,8 @@ class LastQuestion(Exception):
             pass
 
     def __str__(self):
-        return('this was the last question in this room')
+        return "this was the last question in this room"
+
 
 ############################
 # Authentication Endpoints #
@@ -323,7 +339,7 @@ def loaduser(id):
     return userOBJ
 
 
-#login_manager.login_view = "login"
+# login_manager.login_view = "login"
 login_manager.session_protection = "strong"
 
 
@@ -331,64 +347,55 @@ login_manager.session_protection = "strong"
 def login():
     request_data = request.get_json()
     data = request_data
-    print('login')
+    print("login")
     print(session.keys())
     print(session.values())
     print(session.sid)
-    if 'session' in data:
-        session['value'] = data['session']
-    elif 'email' in data:
-        if data['email']:
+    if "session" in data:
+        session["value"] = data["session"]
+    elif "email" in data:
+        if data["email"]:
             email = request_data["email"]
-            if 'passwordHash' in request_data:
+            if "passwordHash" in request_data:
                 passwordHash = request_data["passwordHash"]
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
 
-                return(jsonify({
-                    'status': 'success',
-                    'userID': userObj.get_id()
-                }
-                ), 200)
+                return (jsonify({"status": "success", "userID": userObj.get_id()}), 200)
             else:
-                return(jsonify("Username or password error"), 401)
+                return (jsonify("Username or password error"), 401)
 
 
-@socketio.on('socketLogin')
+@socketio.on("socketLogin")
 def socketLogin(data):
-    #request_data = request.get_json()
-    #data = request_data
-    print('socketLogin')
+    # request_data = request.get_json()
+    # data = request_data
+    print("socketLogin")
     print(session.keys())
     print(session.values())
     print(session.sid)
-    if 'session' in data:
-        session['value'] = data['session']
-    elif 'email' in data:
-        if data['email']:
+    if "session" in data:
+        session["value"] = data["session"]
+    elif "email" in data:
+        if data["email"]:
             email = data["email"]
-            if 'passwordHash' in data:
+            if "passwordHash" in data:
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
 
-                send({
-                    'status': 'success',
-                    'userID': userObj.get_id()
-                }
-                )
+                send({"status": "success", "userID": userObj.get_id()})
             else:
                 send("Username or password error")
+
 
 # logout route
 
@@ -397,54 +404,53 @@ def socketLogin(data):
 @login_required
 def logout():
     logout_user()
-    return(jsonify('logout success'), 200)
+    return (jsonify("logout success"), 200)
 
 
 @app.route("/api/displayHostUserInfo", methods=["POST"])
 def user_info():
     if current_user.is_authenticated:
-        return(current_user.to_json(), 200)
+        return (current_user.to_json(), 200)
 
 
 @app.route("/api/isUserLoggedIn", methods=["GET"])
 def apiIsUserLoggedIn():
     if current_user.is_authenticated:
         print(f"User ID is {current_user.get_id()}")
-        return('True')
+        return "True"
     elif not current_user.is_authenticated:
-        return('False')
+        return "False"
+
 
 ####################
 # Socket IO Events #
 ####################
 
 
-@app.route('/socketIO/API/createRoom', methods=["POST"])
+@app.route("/socketIO/API/createRoom", methods=["POST"])
 def forward():
-    print(
-        f" the current user is: {current_user.firstName} {current_user.lastName}")
-    return '1'  # createRoom()
+    print(f" the current user is: {current_user.firstName} {current_user.lastName}")
+    return "1"  # createRoom()
 
 
 # @app.route('/socketIO/API/createRoom2', methods=["POST"])
-@socketio.on('createRoom')
+@socketio.on("createRoom")
 def createRoom(data):
-    #print(session.get('currentUser', 'user not found'))
+    # print(session.get('currentUser', 'user not found'))
     # if current_user.is_authenticated:
-    quizId = ''.join(random.choice(string.ascii_lowercase)
-                     for i in range(6))
-    print('createRoom')
+    quizId = "".join(random.choice(string.ascii_uppercase) for i in range(6))
+    print("createRoom")
     print(data)
     print(session.keys())
     print(session.values())
     print(session.sid)
-    questions = data['questionIDs']
+    questions = data["questionIDs"]
     if len(questions) == 0:
         print("questions len was 0")
-        return("error", 400)
-    timeLimit = data['timeLimit']
-    requestUserId = data['userID']
-    quizStarted = 'False'
+        return ("error", 400)
+    timeLimit = data["timeLimit"]
+    requestUserId = data["userID"]
+    quizStarted = "False"
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -455,50 +461,61 @@ def createRoom(data):
         timeLimit=timeLimit,
         quizStarted=quizStarted,
         currentQuestion="initiateStr",
-        lastQuestion='initiateStr',
-        firstQuestion='initiatieStr'
+        lastQuestion="initiateStr",
+        firstQuestion="initiatieStr",
     )
     activeRooms.save()
-    print(f'room created with quiz ID: {quizId}')
-    #emit('id', f'ID {quizId}', namespace='/', )
-
-    return(quizId)
+    print(f"room created with quiz ID: {quizId}")
+    # emit('id', f'ID {quizId}', namespace='/', )
+    join_room(quizId)
+    return quizId
 
 
 # join room
-@socketio.on('join')
+@socketio.on("join")
 def on_join(data):
-    username = data['username']
-    room = data['room']
+    username = data["username"]
+    room = data["room"]
     join_room(room)
-    userPk = data['userID']
+    userPk = data["userID"]
 
     roomObj = ActiveRooms.objects(roomId=room).first()
-    print('the join event was run')
+    print("the join event was run")
     print(data.keys())
     print(data.values())
-    emit('joinRoom', roomObj.timeLimit)
+    emit("joinRoom", roomObj.timeLimit)
 
     roomObj.connectedUserId.append(userPk)
     roomObj.allConnectedUsers.append(userPk)
     roomObj.save()
     print("emitting onRoomUpdated")
-    emit("onRoomUpdated", roomObj.connectedUserId, to=room)
-    emit("event", )
-    return True
+
+    thisNewUser = UserType.objects(id=userPk).first()
+    newUserName = thisNewUser.firstName + " " + thisNewUser.lastName
+    tempArray = [
+        UserType.objects(id=id).first().firstName
+        + " "
+        + UserType.objects(id=id).first().lastName
+        for id in roomObj.connectedUserId
+    ]
+    print(tempArray)
+    emit("onRoomUpdated", newUserName, to=room)
+    return (tempArray, roomObj.timeLimit)
+
 
 # exit room
 
 
-@socketio.on('leave')
+@socketio.on("leave")
 def on_leave(data):
-    print('leave')
-    username = data['username']
-    room = data['room']
+    print("leave")
+    username = data["username"]
+    room = data["room"]
     leave_room(room)
 
-    print('the ')
-    send(username + ' has left the quizspace.', to=room)
+    print("the ")
+    send(username + " has left the quizspace.", to=room)
+
 
 # submit quiz answer
 
@@ -507,9 +524,9 @@ def on_leave(data):
 def submitAnswer(data):
 
     print(data)
-    curUserId = data['userID']
-    print('submitAnswer')
-    roomId = data['room']
+    curUserId = data["userID"]
+    print("submitAnswer")
+    roomId = data["room"]
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -517,25 +534,30 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=curUserId,
         questionId=quizEnv.currentQuestion,
-        answer=data['answer'],
+        answer=data["answer"],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId="None",
         markedBy="None",
-        markedDateTimeStr='None'
+        markedDateTimeStr="None",
     )
     thisAnswer.save()
     # checks to see if this answer was the last one for the quizEnv
-    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
-    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+    print(f".count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}")
+    print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
 
-    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
-        emit('questionTimeout', to=roomId)
-        print('emiting')
+    if (
+        Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
+        % (len(quizEnv.connectedUserId) - 1)
+        == 0
+    ):
+        emit("questionTimeout", to=roomId)
+        print("emiting")
     else:
-        print('still more users to answer')
+        print("still more users to answer")
 
-    return 'yis'
+    return "yis"
+
 
 # Send Question to quizspace
 # namespace is implied from the originating event
@@ -543,17 +565,17 @@ def submitAnswer(data):
 
 @socketio.event
 def startQuiz(data):
-    curUserId = data['userID']
-    print('startQuiz')
+    curUserId = data["userID"]
+    print("startQuiz")
     print(data.keys())
     print(data.values())
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
-    quizEnv.quizStarted = 'True'
+    quizEnv.quizStarted = "True"
     quizEnv.save()
 
     try:
         op = {}
-        roomId = data['room']
+        roomId = data["room"]
         print(f"var room Id {roomId}")
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
         questionLs = quizEnv.questions
@@ -563,23 +585,23 @@ def startQuiz(data):
         curQuestion = questionLs[0]
         quizEnv.currentQuestion = curQuestion
         quizEnv.questions.remove(curQuestion)
-        quizEnv.firstQuestion = 'True'
+        quizEnv.firstQuestion = "True"
         quizEnv.save()
 
-        if quizEnv.lastQuestion == 'True':
-            print('was last question')
+        if quizEnv.lastQuestion == "True":
+            print("was last question")
             raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
         print(f"questions list length is {len(quizEnv.questions)}")
         print(quizEnv.questions)
         if len(quizEnv.questions) == 0:
-            print('lastQuestion = True')
-            op['lastQuestion'] = "True"
-            quizEnv.lastQuestion = 'True'
+            print("lastQuestion = True")
+            op["lastQuestion"] = "True"
+            quizEnv.lastQuestion = "True"
         else:
-            print('lastQuestion = False')
-            op['lastQuestion'] = "False"
-            quizEnv.lastQuestion = 'False'
+            print("lastQuestion = False")
+            op["lastQuestion"] = "False"
+            quizEnv.lastQuestion = "False"
 
         quizEnv.save()
 
@@ -597,20 +619,21 @@ def startQuiz(data):
 
         strCurrentTime = datetime.datetime.now()
         op["currentTime"] = str(strCurrentTime)
-        strFinishQuestion = datetime.datetime.now(
-        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        strFinishQuestion = datetime.datetime.now() + datetime.timedelta(
+            seconds=quizEnv.timeLimit
+        )
         op["finishQuestion"] = str(strFinishQuestion)
-        print('type of finishQuestion')
-        print(type(op['finishQuestion']))
-        print('finishQuestion')
-        print(op['finishQuestion'])
+        print("type of finishQuestion")
+        print(type(op["finishQuestion"]))
+        print("finishQuestion")
+        print(op["finishQuestion"])
 
-        print('the quizEnv firstQuestion should have been set by now')
+        print("the quizEnv firstQuestion should have been set by now")
         print(quizEnv.currentQuestion)
     except Exception as err:
-        print('there was an error')
+        print("there was an error")
         print(err)
-        send('There where no questions in this quiz')
+        send("There were no questions in this quiz")
     else:
         print(op)
 
@@ -623,15 +646,15 @@ def prepareNextQuestion(data):
 @socketio.event
 def sendQuestion(data):
     try:
-        print('sendQuestionEvent')
-        send('question was sent')
+        print("sendQuestionEvent")
+        send("question was sent")
         op = {}
-        roomId = data['room']
+        roomId = data["room"]
         print(roomId)
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
         print(quizEnv.roomId)
-        if quizEnv.lastQuestion == 'True':
-            print('was last question')
+        if quizEnv.lastQuestion == "True":
+            print("was last question")
             raise LastQuestion(quizEnv.roomId)
 
         print(f"questions list length is {len(quizEnv.questions)}")
@@ -641,24 +664,24 @@ def sendQuestion(data):
         print(quizEnv.questions)
         print(questionLs)
 
-        if quizEnv.firstQuestion == 'True':
+        if quizEnv.firstQuestion == "True":
             curQuestion = quizEnv.currentQuestion
-            quizEnv.firstQuestion = 'False'
+            quizEnv.firstQuestion = "False"
         else:
             curQuestion = questionLs[0]
             quizEnv.currentQuestion = curQuestion
             quizEnv.questions.remove(curQuestion)
 
-        thisRoom = data['room']
+        thisRoom = data["room"]
 
         if len(quizEnv.questions) == 0:
-            print('lastQuestion = True')
-            op['lastQuestion'] = "True"
-            quizEnv.lastQuestion = 'True'
+            print("lastQuestion = True")
+            op["lastQuestion"] = "True"
+            quizEnv.lastQuestion = "True"
         else:
-            print('lastQuestion = False')
-            op['lastQuestion'] = "False"
-            quizEnv.lastQuestion = 'False'
+            print("lastQuestion = False")
+            op["lastQuestion"] = "False"
+            quizEnv.lastQuestion = "False"
 
         quizEnv.save()
 
@@ -673,34 +696,37 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-        strCurrentTime = datetime.datetime.now()
-        op["currentTime"] = str(strCurrentTime)
-        strFinishQuestion = datetime.datetime.now(
-        ) + datetime.timedelta(seconds=quizEnv.timeLimit)
-        op["finishQuestion"] = str(strFinishQuestion)
-        print('type of finishQuestion')
-        print(type(op['finishQuestion']))
-        print('finishQuestion')
-        print(op['finishQuestion'])
+        # strCurrentTime = datetime.datetime.now()
+        # op["currentTime"] = str(strCurrentTime)
+        # strFinishQuestion = datetime.datetime.now(
+        # ) + datetime.timedelta(seconds=quizEnv.timeLimit)
+        # op["finishQuestion"] = str(strFinishQuestion)
+        tempUnixTimeInMS = time.time_ns() / 1000000
+        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        print(f'Value of "time limit": {quizEnv.timeLimit}')
+        print("type of finishQuestion")
+        print(type(op["finishQuestion"]))
+        print("finishQuestion")
+        print(op["finishQuestion"])
     except LastQuestion as lqe:
-        print(f'caught that fact it was the last question for room {lqe}')
+        print(f"caught that fact it was the last question for room {lqe}")
     except Exception:
-        print('there was an error')
+        print("there was an error")
     else:
         print(type(op))
         print(op)
         emit("receiveQuestion", op, to=thisRoom)
         socketio.sleep(quizEnv.timeLimit)
-        emit('questionTimeout', to=thisRoom)
+        emit("questionTimeout", to=thisRoom)
         # print(op)
 
 
 @socketio.event
 def finishQuiz(data):
     print("finish quiz")
-    #room = data['room']
+    # room = data['room']
     # close_room(room)
-    curUserId = data['userID']
+    curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quiz = Quizzes(
         roomId=quizEnv.roomId,
@@ -709,7 +735,7 @@ def finishQuiz(data):
         quizCompletedSuccessfully="True",
         questions=quizEnv.allQuestions,
         timeLimit=quizEnv.timeLimit,
-        activeRoomId=str(quizEnv.pk)
+        activeRoomId=str(quizEnv.pk),
     )
     quiz.save()
     quizEnv.delete()
@@ -719,6 +745,7 @@ def finishQuiz(data):
 # SOCKETIO LOGIC FUNCTIONS #
 ############################
 
+
 def addUserToRoom(room, userPK):
     roomObj = ActiveRooms.objects(roomId=room).first()
     roomObj.connectedUserId.append(userPK)
@@ -726,7 +753,7 @@ def addUserToRoom(room, userPK):
     roomObj.save()
     onRoomUpdated(room)
     print("emitting onRoomUpdated")
-    #emit("onRoomUpdated", connectedusers, to=roomId)
+    # emit("onRoomUpdated", connectedusers, to=roomId)
 
 
 def removeUserFromRoom(roomId, userId):
@@ -735,10 +762,10 @@ def removeUserFromRoom(roomId, userId):
         room.connectedUserId.remove(userId)
         room.save()
     except ValueError:
-        return(jsonify('User wasnt in the room'), 404)
+        return (jsonify("User wasnt in the room"), 404)
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
         pass
 
@@ -760,64 +787,68 @@ def onRoomUpdated(roomId):
 #################
 
 # test route
-@app.route('/sm')
+@app.route("/sm")
 def sm():
     op = {}
-    timeLimit = int(request.args.get('timeLimit'))
+    timeLimit = int(request.args.get("timeLimit"))
     op["currentTime"] = datetime.datetime.now()
-    op["finishQuestion"] = str(datetime.datetime.now(
-    ) + datetime.timedelta(seconds=timeLimit))
-    return(op, 200)
+    op["finishQuestion"] = str(
+        datetime.datetime.now() + datetime.timedelta(seconds=timeLimit)
+    )
+    return (op, 200)
+
 
 # GET Users
 
 
-@app.route("/get/users", methods=['GET'])
+@app.route("/get/users", methods=["GET"])
 def getUsers():
     requestData = request.get_json()
 
     def getUserById(id):
-        print('getUserById')
-        user = UserType.objects(id=id).exclude('passwordHash').first()
+        print("getUserById")
+        user = UserType.objects(id=id).exclude("passwordHash").first()
         return user
 
     def getUserByType(type):
-        print('getUserByType')
+        print("getUserByType")
         op2 = {}
         for user in UserType.objects(hostOrTest=type):
-            op2[user.get_id()] = UserType.objects(
-                id=str(user.pk)).exclude('passwordHash').first()
+            op2[user.get_id()] = (
+                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
+            )
         return op2
 
     def getAllUsers():
-        print('getAllUsers')
+        print("getAllUsers")
         print(UserType.objects)
         op3 = {}
         for user in UserType.objects:
-            op3[user.get_id()] = UserType.objects(
-                id=str(user.pk)).exclude('passwordHash').first()
+            op3[user.get_id()] = (
+                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
+            )
         print(op3)
         return op3
 
     if not requestData:
         return getAllUsers()
 
-    if 'id' in requestData and 'type' in requestData:
-        return('there was an error with your request', 400)
+    if "id" in requestData and "type" in requestData:
+        return ("there was an error with your request", 400)
 
-    if 'id' in requestData:
-        op = getUserById(requestData['id'])
-    elif 'type' in requestData:
-        op = getUserByType(requestData['type'])
+    if "id" in requestData:
+        op = getUserById(requestData["id"])
+    elif "type" in requestData:
+        op = getUserByType(requestData["type"])
     else:
         op = getAllUsers()
 
     print(op)
-    return(jsonify(op))
+    return jsonify(op)
 
 
 # creates host users
-@app.route('/create/hostUser', methods=['POST'])
+@app.route("/create/hostUser", methods=["POST"])
 def createHostUser():
     requestData = request.get_json()
     try:
@@ -829,52 +860,54 @@ def createHostUser():
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
             lastSignIn=datetime.datetime.now(),
-            hostOrTest='host'
+            hostOrTest="host",
         )
         hostUser.save()
     except Exception as e:
-        print('There was an error in this request')
+        print("There was an error in this request")
         print(e)
-        return (jsonify('BAD REQUEST'), 400)
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return (jsonify(hostUser))
+        return jsonify(hostUser)
+
 
 # creates test users
 
 
-@app.route('/create/testUser', methods=['POST'])
+@app.route("/create/testUser", methods=["POST"])
 def createTestUser():
     requestData = request.get_json()
     try:
         testUser = UserType(
-            firstName='Test',
-            lastName='User',
+            firstName="Test",
+            lastName="User",
             email=requestData["email"],
             passwordHash=requestData["email"],
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
             lastSignIn=datetime.datetime.now(),
-            hostOrTest='test'
+            hostOrTest="test",
         )
         testUser.save()
     except Exception as e:
-        print('There was an error in this request')
+        print("There was an error in this request")
         print(e)
-        return (jsonify('BAD REQUEST'), 400)
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return (jsonify(testUser))
+        return jsonify(testUser)
+
 
 # checks user types
 
 
-@app.route('/check/userType', methods=['POST'])
+@app.route("/check/userType", methods=["POST"])
 def checkUserType():
     request_data = request.get_json()
     if request_data == None:
         return make_response({"error": "Nothing sent."}, 400)
 
-    email = request_data['email'].lower()
-    if not('@' in email):
+    email = request_data["email"].lower()
+    if not ("@" in email):
         return make_response({"error": "Not a valid email"}, 400)
 
     emailDomain = email.split("@", 1)[1]
@@ -891,9 +924,9 @@ def checkUserType():
     return make_response({"error": "User not found"}, 400)
 
 
-@app.route('/api/questions', methods=['GET'])
+@app.route("/api/questions", methods=["GET"])
 def apiQuestionsGet():
-    getID, categ = request.args.get("id"), request.args.get('category')
+    getID, categ = request.args.get("id"), request.args.get("category")
 
     # Get single question if an ID is passed
     if getID:
@@ -908,26 +941,27 @@ def apiQuestionsGet():
         return (jsonify(Question.objects), 200)
 
     # Return a list of all questions in their respective categories
-    if categ == '_all_':
+    if categ == "_all_":
         op = {}
         for category in Categories.objects:
             print(category.assocQuestions)
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(
-                    Question.objects(id=questionID).first())
+                op[category.name].append(Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
     question = Question.objects(category=categ)
     if not question:
-        return make_response("This category either doesn't exist or has no questions assigned to it", 404)
+        return make_response(
+            "This category either doesn't exist or has no questions assigned to it", 404
+        )
 
     return (jsonify(question), 200)
 
 
 # creates questions
-@app.route('/api/questions', methods=['POST'])
+@app.route("/api/questions", methods=["POST"])
 def createQuestion():
     requestData = request.get_json()
     try:
@@ -939,19 +973,20 @@ def createQuestion():
             title=requestData["title"],
             bodyMD=requestData["bodyMD"],
             videoURL=requestData["videoURL"],
-            imageURL=requestData["imageURL"]
+            imageURL=requestData["imageURL"],
         )
         question.save()
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
         return question.to_json()
+
 
 # Edits Question
 
 
-@app.route('/api/questions', methods=['PUT'])
+@app.route("/api/questions", methods=["PUT"])
 def editsQuestion():
     requestData = request.get_json()
     id = requestData["id"]
@@ -975,52 +1010,50 @@ def editsQuestion():
             question.imageURL = requestData["imageURL"]
         question.save()
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return(question.to_json())
+        return question.to_json()
 
 
-@app.route('/api/questions', methods=["DELETE"])
+@app.route("/api/questions", methods=["DELETE"])
 def deletesQuestions():
     try:
         requestData = request.get_json()
         id = requestData["id"]
         question = Question.objects(id=id).first()
         if not question:
-            raise ResourceNotFound(resourceType='question')
+            raise ResourceNotFound(resourceType="question")
         question.delete()
     except ResourceNotFound:
-        print('Question Not Found')
-        return(jsonify(f'Question with ID {id} does not exist'), 404)
+        print("Question Not Found")
+        return (jsonify(f"Question with ID {id} does not exist"), 404)
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return (jsonify("success"))
+        return jsonify("success")
 
 
-@app.route('/api/categories', methods=["GET"])
+@app.route("/api/categories", methods=["GET"])
 def getCategories():
-    return(jsonify(Categories.objects), 200)
+    return (jsonify(Categories.objects), 200)
 
 
-@app.route('/api/categories', methods=["POST"])
+@app.route("/api/categories", methods=["POST"])
 def postCategories():
     requestData = request.get_json()
     try:
-        catg = Categories(
-            name=requestData['name']
-        )
+        catg = Categories(name=requestData["name"])
         catg.save()
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return(jsonify(catg))
+        return jsonify(catg)
 
 
-@app.route('/api/categories', methods=["PUT"])
+@app.route("/api/categories", methods=["PUT"])
 def putCategories():
     requestData = request.get_json()
     id = requestData["id"]
@@ -1032,10 +1065,10 @@ def putCategories():
     except Exception:
         return ("error", 400)
     else:
-        return(jsonify(category))
+        return jsonify(category)
 
 
-@app.route('/api/categories', methods=["DELETE"])
+@app.route("/api/categories", methods=["DELETE"])
 def deletesCategories():
     requestData = request.get_json()
     try:
@@ -1043,7 +1076,7 @@ def deletesCategories():
         migrateTo = requestData["migrateTo"]
         category = Categories.objects(id=id).first()
         if not category:
-            raise ResourceNotFound(resourceType='category')
+            raise ResourceNotFound(resourceType="category")
         if not category.assocQuestions():
             category.delete()
         else:
@@ -1053,64 +1086,66 @@ def deletesCategories():
                 quessy.save()
                 category.delete()
     except Exception:
-        print('There was an error in this request')
-        return (jsonify('BAD REQUEST'), 400)
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
     else:
-        return(jsonify("success"))
+        return jsonify("success")
 
 
-@app.route('/exception/badRequestError')
+@app.route("/exception/badRequestError")
 def testBadRequestError():
     raise BadRequestError()
 
 
-@app.route('/set/', methods=['GET'])
+@app.route("/set/", methods=["GET"])
 def set():
-    idVar = 'this is my UIDIDIDIDI'
-    session['theID'] = idVar
-    #print(f"idVar is {idVar}")
-    return 'ok'
+    idVar = "this is my UIDIDIDIDI"
+    session["theID"] = idVar
+    # print(f"idVar is {idVar}")
+    return "ok"
 
 
-@app.route('/get/', methods=['GET'])
+@app.route("/get/", methods=["GET"])
 def get():
-    yolo = request.args.get('doesnei')
+    yolo = request.args.get("doesnei")
     print(yolo)
-    return(jsonify(yolo))
+    return jsonify(yolo)
 
 
-@app.route('/SAM/api/login', methods=['GET', 'POST'])
+@app.route("/SAM/api/login", methods=["GET", "POST"])
 def samCustomLogin():
-    if request.method == 'GET':
-        return jsonify({
-            'session': session.get('value', ''),
-            'user': current_user.firstName
-            if current_user.is_authenticated else 'anonymous'
-        })
+    if request.method == "GET":
+        return jsonify(
+            {
+                "session": session.get("value", ""),
+                "user": current_user.firstName
+                if current_user.is_authenticated
+                else "anonymous",
+            }
+        )
     data = request.get_json()
-    if 'session' in data:
-        print('session in data')
-        session['value'] = data['session']
-    elif 'email' in data:
-        if data['email']:
-            email = data['email']
-            passwordHash = data['passwordHash']
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+    if "session" in data:
+        print("session in data")
+        session["value"] = data["session"]
+    elif "email" in data:
+        if data["email"]:
+            email = data["email"]
+            passwordHash = data["passwordHash"]
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             login_user(userObj)
-            print('login')
+            print("login")
             print(session.keys())
             print(session.values())
-            return('login')
+            return "login"
         else:
             logout_user()
-            print('logout')
-            return('logout')
-    print('things didnt go to plan')
-    return '', 204
+            print("logout")
+            return "logout"
+    print("things didnt go to plan")
+    return "", 204
 
 
-@app.route("/activeRooms/Delete/All", methods=['DELETE'])
+@app.route("/activeRooms/Delete/All", methods=["DELETE"])
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
@@ -1121,33 +1156,36 @@ def deleteAllActiveRooms():
 # SERVER TESTING EVENTS AND HTTP ENDPOINTS #
 ############################################
 
+
 @socketio.event
 def startServer7Test():
-    print('server test started')
+    print("server test started")
     # print(data)
-    print('socket sleeping for 30 seconds')
+    print("socket sleeping for 30 seconds")
     socketio.sleep(30)
-    print('socket waking')
-    emit('ServerTestFinished', 'the server finished testing')
+    print("socket waking")
+    emit("ServerTestFinished", "the server finished testing")
 
 
-@app.route('/server/testing1', methods=['GET'])
+@app.route("/server/testing1", methods=["GET"])
 def serverTesting1():
-    print("""
+    print(
+        """
     #########################
     # THE SERVER IS TESTING #
     #########################
-    """)
-    return ('the server can still handle requests')
+    """
+    )
+    return "the server can still handle requests"
 
 
-@app.route('/submit/answer', methods=['POST'])
+@app.route("/submit/answer", methods=["POST"])
 def submitAnswer():
     data = request.get_json()
     print(data)
-    curUserId = data['userID']
-    print('submitAnswer')
-    roomId = data['room']
+    curUserId = data["userID"]
+    print("submitAnswer")
+    roomId = data["room"]
     print(data)
     print(curUserId)
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -1155,27 +1193,31 @@ def submitAnswer():
     thisAnswer = Quenswers(
         userId=curUserId,
         questionId=quizEnv.currentQuestion,
-        answer=data['answer'],
+        answer=data["answer"],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId="None",
         markedBy="None",
-        markedDateTimeStr='None'
+        markedDateTimeStr="None",
     )
     thisAnswer.save()
     # checks to see if this answer was the last one for the quizEnv
-    print(f'.count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}')
-    print(f'len -1 is {len(quizEnv.connectedUserId) - 1}')
+    print(f".count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}")
+    print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
 
-    if Quenswers.objects(quizEnvId=str(quizEnv.pk)).count() % (len(quizEnv.connectedUserId) - 1) == 0:
-        emit('questionTimeout', to=roomId)
-        print('emiting')
+    if (
+        Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
+        % (len(quizEnv.connectedUserId) - 1)
+        == 0
+    ):
+        emit("questionTimeout", to=roomId)
+        print("emiting")
     else:
-        print('still more users to answer')
+        print("still more users to answer")
 
-    return 'yis'
+    return "yis"
 
 
 # runs server
-if __name__ == '__main__':
+if __name__ == "__main__":
     socketio.run(app, port=5000, debug=True)
