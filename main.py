@@ -905,6 +905,31 @@ def createTestUser():
         return jsonify(testUser)
 
 
+@app.route("/edit/user", methods=["POST"])
+def createDeeTestUser():
+    requestData = request.get_json()
+    try:
+        id = requestData["id"]
+        testUser = UserType.objects(id=id).first()
+        if "firstName" in requestData:
+            testUser.firstName = requestData["firstName"]
+        if "lastName" in requestData:
+            testUser.lastName = requestData["lastName"]
+        if "email" in requestData:
+            testUser.email = requestData["email"]
+        if "passwordHash" in requestData:
+            testUser.passwordHash = requestData["passwordHash"]
+        if "hostOrTest" in requestData:
+            testUser.hostOrTest = requestData["hostOrTest"]
+        testUser.lastEdit = datetime.datetime.now()
+    except Exception:
+        print("there was an error in the '/edit/testUser' 'PUT' request")
+        return (jsonify("BAD REQUEST"), 400)
+    else:
+        testUser.save()
+        return testUser.to_json()
+
+
 # checks user types
 
 
