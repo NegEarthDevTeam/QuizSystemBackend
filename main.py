@@ -930,6 +930,21 @@ def createDeeTestUser():
         return testUser.to_json()
 
 
+@app.route("/delete/user", methods=["DELETE"])
+def deleteUsers():
+    requestData = request.get_json()
+    id = requestData["id"]
+    try:
+        userObj = UserType.objects(id=id).first()
+        userObj.hostOrTest = "deleted"
+        userObj.save()
+    except Exception:
+        print("There was an error in this request")
+        return (jsonify("BAD REQUEST"), 400)
+    else:
+        return jsonify({f"STATUS": "{id} set to deleted"})
+
+
 # checks user types
 
 
