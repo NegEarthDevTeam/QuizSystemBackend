@@ -873,8 +873,8 @@ def createTestUser():
     requestData = request.get_json()
     try:
         testUser = UserType(
-            firstName="Test",
-            lastName="User",
+            firstName=requestData["firstName"],
+            lastName=requestData["lastName"],
             email=requestData["email"],
             passwordHash=requestData["email"],
             created=datetime.datetime.now(),
