@@ -158,6 +158,8 @@ class Quizzes(db.Document):
     questions = db.ListField()
     timeLimit = db.IntField()
     activeRoomId = db.StringField()
+    hostId = db.StringField()
+    quenswerId = db.ListField()
 
     def to_json(self):
         return jsonify(
@@ -170,6 +172,8 @@ class Quizzes(db.Document):
                 "Questions": self.questions,
                 "Time Limit": self.timeLimit,
                 "Active Room Object Id": self.activeRoomId,
+                "Host ID": self.hostId,
+                "Quenswer IDs": self.quenswerId,
             }
         )
 
@@ -227,6 +231,7 @@ class ActiveRooms(db.Document):
     currentQuestion = db.StringField()
     lastQuestion = db.StringField()
     firstQuestion = db.StringField()
+    hostId = db.StringField()
 
     def to_json(self):
         return jsonify(
@@ -242,6 +247,7 @@ class ActiveRooms(db.Document):
                 "Current Question": self.currentQuestion,
                 "lastQuestion": self.lastQuestion,
                 "firstQuestion": self.firstQuestion,
+                "Host ID": self.hostId,
             }
         )
 
@@ -462,7 +468,8 @@ def createRoom(data):
         quizStarted=quizStarted,
         currentQuestion="initiateStr",
         lastQuestion="initiateStr",
-        firstQuestion="initiatieStr",
+        firstQuestion="initiateStr",
+        hostId=requestUserId,
     )
     activeRooms.save()
     print(f"room created with quiz ID: {quizId}")
@@ -524,7 +531,7 @@ def on_leave(data):
 def submitAnswer(data):
     print("data")
     print(data)
-    curUserId = data["userID"]
+    curUserId = data["userID"]["userID"]
     print("submitAnswer")
     roomId = data["room"]["roomCode"]
     print(f"roomID: {roomId}")
@@ -538,7 +545,7 @@ def submitAnswer(data):
         answer=str(data["Answer"]),
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
-        quizId="None",
+        quizId=quizEnv.roomId,
         markedBy="None",
         markedDateTimeStr="None",
     )
@@ -733,6 +740,10 @@ def finishQuiz(data):
     # close_room(room)
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+
+    for quenswer in Quenswers.objects():
+        pass
+
     quiz = Quizzes(
         roomId=quizEnv.roomId,
         allConnectedUsers=quizEnv.allConnectedUsers,
@@ -741,9 +752,12 @@ def finishQuiz(data):
         questions=quizEnv.allQuestions,
         timeLimit=quizEnv.timeLimit,
         activeRoomId=str(quizEnv.pk),
+        hostId=quizEnv.hostId,
+        quenswerId=[],
     )
     quiz.save()
     quizEnv.delete()
+    # TODO include a way of assigning all of the quenswer IDs to the Quiz document
 
 
 ############################
@@ -1153,6 +1167,18 @@ def deleteAllQuizzes():
     return "success"
 
 
+@app.route("/quenswers/Delete/All", methods=["DELETE"])
+def deleteAllQuenswers():
+    for quenswer in Quenswers.objects:
+        quenswer.delete()
+    return "success"
+
+
+@app.route("/quizzes/all", methods=["GET"])
+def getAllQuizzes():
+    return (jsonify(Quizzes.objects), 200)
+
+
 ############################################
 # SERVER TESTING EVENTS AND HTTP ENDPOINTS #
 ############################################
@@ -1178,45 +1204,6 @@ def serverTesting1():
     """
     )
     return "the server can still handle requests"
-
-
-@app.route("/submit/answer", methods=["POST"])
-def submitAnswer():
-    data = request.get_json()
-    print(data)
-    curUserId = data["userID"]
-    print("submitAnswer")
-    roomId = data["room"]
-    print(data)
-    print(curUserId)
-    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
-
-    thisAnswer = Quenswers(
-        userId=curUserId,
-        questionId=quizEnv.currentQuestion,
-        answer=data["answer"],
-        submitDateTime=datetime.datetime.now(),
-        quizEnvId=str(quizEnv.pk),
-        quizId="None",
-        markedBy="None",
-        markedDateTimeStr="None",
-    )
-    thisAnswer.save()
-    # checks to see if this answer was the last one for the quizEnv
-    print(f".count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}")
-    print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
-
-    if (
-        Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
-        % (len(quizEnv.connectedUserId) - 1)
-        == 0
-    ):
-        emit("questionTimeout", to=roomId)
-        print("emiting")
-    else:
-        print("still more users to answer")
-
-    return "yis"
 
 
 # runs server
