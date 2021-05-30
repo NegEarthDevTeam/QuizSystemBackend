@@ -733,6 +733,7 @@ def finishQuiz(data):
     # close_room(room)
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    emit("notifyFinishQuiz",to=quizEnv.roomId)
     quiz = Quizzes(
         roomId=quizEnv.roomId,
         allConnectedUsers=quizEnv.allConnectedUsers,
