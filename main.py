@@ -629,7 +629,7 @@ def startQuiz(data):
         print("finishQuestion")
         print(op["finishQuestion"])
 
-        emit('startedQuiz',(len(questionLs)),to=roomId)
+        emit("startedQuiz", (len(questionLs)), to=roomId)
 
         print("the quizEnv firstQuestion should have been set by now")
         print(quizEnv.currentQuestion)
@@ -802,7 +802,7 @@ def sm():
 
 @app.route("/get/users", methods=["GET"])
 def getUsers():
-    reqID,reqType = request.args.get("id"), request.args.get("type")
+    reqID, reqType = request.args.get("id"), request.args.get("type")
 
     def getUserById(id):
         print("getUserById")
@@ -813,7 +813,9 @@ def getUsers():
         print("getUserByType")
         op2 = []
         for user in UserType.objects(hostOrTest=type):
-            op2.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
+            op2.append(
+                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
+            )
         return op2
 
     def getAllUsers():
@@ -828,7 +830,7 @@ def getUsers():
         return op3
 
     if reqID and reqType:
-        return ("Cannot filter by both type and ID.",400)
+        return ("Cannot filter by both type and ID.", 400)
 
     if reqID:
         return jsonify(getUserById(reqID))
@@ -1141,6 +1143,13 @@ def samCustomLogin():
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
+    return "success"
+
+
+@app.route("/quizzes/Delete/All", methods=["DELETE"])
+def deleteAllQuizzes():
+    for quiz in Quizzes.objects:
+        quiz.delete()
     return "success"
 
 
