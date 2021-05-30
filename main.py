@@ -905,7 +905,7 @@ def createTestUser():
         return jsonify(testUser)
 
 
-@app.route("/edit/user", methods=["POST"])
+@app.route("/edit/user", methods=["PUT"])
 def createDeeTestUser():
     requestData = request.get_json()
     try:
