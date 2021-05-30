@@ -49,7 +49,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
 #####################
 
 
-class HostUser(db.Document):
+"""class HostUser(db.Document):
     firstName = db.StringField()
     lastName = db.StringField()
     email = db.StringField()
@@ -96,7 +96,7 @@ class TestUser(db.Document):
                 "Creation Date": self.created,
                 "Edit Date": self.lastEdit,
             }
-        )
+        )"""
 
 
 class UserType(db.Document):
@@ -145,6 +145,13 @@ class UserType(db.Document):
     @property
     def test(self):
         if self.hostOrTest == "test":
+            return True
+        else:
+            return False
+
+    @property
+    def deleted(self):
+        if self.hostOrTest == "deleted":
             return True
         else:
             return False
@@ -291,6 +298,22 @@ class BadRequestError(Exception):
 
     def __str__(self):
         return "The request was bad"
+
+
+class UserAlreadyExist(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "A user with that email already exists"
+
+
+class UserDeleted(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "That user is deleted"
 
 
 class ResourceNotFound(Exception):
@@ -860,6 +883,14 @@ def getUsers():
 def createHostUser():
     requestData = request.get_json()
     try:
+        if UserType.objects(email=requestData["email"]).first().firstName != "None":
+            if (
+                UserType.objects(email=requestData["email"]).first().hostOrTest
+                == "deleted"
+            ):
+                raise UserDeleted()
+            else:
+                raise UserAlreadyExist()
         hostUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
@@ -871,6 +902,12 @@ def createHostUser():
             hostOrTest="host",
         )
         hostUser.save()
+    except UserDeleted as ud:
+        print(ud)
+        return (jsonify("User is registered as deleted"), 400)
+    except UserAlreadyExist as uae:
+        print(uae)
+        return (jsonify("User already exists"), 400)
     except Exception as e:
         print("There was an error in this request")
         print(e)
@@ -886,17 +923,31 @@ def createHostUser():
 def createTestUser():
     requestData = request.get_json()
     try:
+        if UserType.objects(email=requestData["email"]).first().firstName != "None":
+            if (
+                UserType.objects(email=requestData["email"]).first().hostOrTest
+                == "deleted"
+            ):
+                raise UserDeleted()
+            else:
+                raise UserAlreadyExist()
         testUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
             email=requestData["email"],
-            passwordHash=requestData["email"],
+            passwordHash=requestData["passwordHash"],
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
             lastSignIn=datetime.datetime.now(),
-            hostOrTest="test",
+            hostOrTest="host",
         )
         testUser.save()
+    except UserDeleted as ud:
+        print(ud)
+        return (jsonify("User is registered as deleted"), 400)
+    except UserAlreadyExist as uae:
+        print(uae)
+        return (jsonify("User already exists"), 400)
     except Exception as e:
         print("There was an error in this request")
         print(e)
