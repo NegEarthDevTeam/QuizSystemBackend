@@ -268,6 +268,7 @@ class Quenswers(db.Document):
     quizId = db.StringField()
     markedBy = db.StringField()
     markedDateTimeStr = db.StringField()
+    correct = db.StringField()
 
     def to_json(self):
         return jsonify(
@@ -281,8 +282,16 @@ class Quenswers(db.Document):
                 "Quiz OBJ ID": self.quizId,
                 "Marker ID": self.markedBy,
                 "Marked Date Time String": self.markedDateTimeStr,
+                "Correct": self.correct,
             }
         )
+
+    @property
+    def marked(self):
+        if self.markedBy == "None":
+            return False
+        else:
+            return True
 
 
 # '' : self. ,
@@ -571,6 +580,7 @@ def submitAnswer(data):
         quizId=quizEnv.roomId,
         markedBy="None",
         markedDateTimeStr="None",
+        correct="unMarked",
     )
     thisAnswer.save()
     # checks to see if this answer was the last one for the quizEnv
@@ -780,7 +790,8 @@ def finishQuiz(data):
     )
     quiz.save()
     quizEnv.delete()
-    # TODO include a way of assigning all of the quenswer IDs to the Quiz document
+    assignQuenswersToQuiz(quiz)
+    # TODO make the server attempt at self marking
 
 
 ############################
@@ -1270,6 +1281,48 @@ def getAllQuizzes():
     return (jsonify(Quizzes.objects), 200)
 
 
+@app.route("/marking", methods=["GET"])
+def markingGet():
+    op = {}
+    x = 0
+    requestData = request.get_json()
+    id = requestData["id"]
+    quiz = Quizzes.objects(id=id).first()
+    for quenswerId in quiz.quenswerId:
+        quensObj = Quenswers.objects(id=quenswerId).first()
+        questObj = Question.objects(id=quensObj.questionId).first()
+        userObj = UserType.objects(id=quensObj.userId).first()
+        userOp = {
+            "firstName": userObj.firstName,
+            "lastName": userObj.lastName,
+            "email": userObj.email,
+            "hostOrTest": userObj.hostOrTest,
+            "id": str(userObj.pk),
+        }
+        op[x] = {}
+        op[x]["quenswer"] = quensObj
+        op[x]["question"] = questObj
+        op[x]["user"] = userOp
+
+        x += 1
+
+    return jsonify(op)
+
+
+@app.route("/marking", methods=["PUT"])
+def putMarking():
+    requestData = request.get_json()
+    quenswerId = requestData["quenswerId"]
+    userId = requestData["userId"]
+    correct = requestData["correct"]
+    quenswer = Quenswers.objects(id=quenswerId).first()
+    quenswer.markedBy = userId
+    quenswer.markedDateTimeStr = str(datetime.datetime.now())
+    quenswer.correct = correct
+    quenswer.save()
+    return (jsonify(quenswer), 200)
+
+
 ############################################
 # SERVER TESTING EVENTS AND HTTP ENDPOINTS #
 ############################################
@@ -1297,6 +1350,25 @@ def serverTesting1():
     return "the server can still handle requests"
 
 
-# runs server
+#######################
+# API LOGIC FUNCTIONS #
+#######################
+
+
+def assignQuenswersToQuiz(quiz):
+    print("trying to asssign quenswers")
+    for quenswer in Quenswers.objects:
+        if quenswer.quizId == quiz.roomId:
+
+            quiz.quenswerId.append(str(quenswer.pk))
+
+    quiz.save()
+    return None
+
+
+###############
+# RUNS SERVER #
+###############
+
 if __name__ == "__main__":
     socketio.run(app, port=5000, debug=True)
