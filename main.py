@@ -769,7 +769,7 @@ def sendQuestion(data):
 @socketio.event
 def finishQuiz(data):
     print("finish quiz")
-    # room = data['room']
+    room = data['room']
     # close_room(room)
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -790,6 +790,7 @@ def finishQuiz(data):
     )
     quiz.save()
     quizEnv.delete()
+    emit("notifyFinishQuiz",to=room)
     assignQuenswersToQuiz(quiz)
     # TODO make the server attempt at self marking
 
