@@ -49,7 +49,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
 #####################
 
 
-class HostUser(db.Document):
+"""class HostUser(db.Document):
     firstName = db.StringField()
     lastName = db.StringField()
     email = db.StringField()
@@ -96,7 +96,7 @@ class TestUser(db.Document):
                 "Creation Date": self.created,
                 "Edit Date": self.lastEdit,
             }
-        )
+        )"""
 
 
 class UserType(db.Document):
@@ -145,6 +145,13 @@ class UserType(db.Document):
     @property
     def test(self):
         if self.hostOrTest == "test":
+            return True
+        else:
+            return False
+
+    @property
+    def deleted(self):
+        if self.hostOrTest == "deleted":
             return True
         else:
             return False
@@ -261,6 +268,7 @@ class Quenswers(db.Document):
     quizId = db.StringField()
     markedBy = db.StringField()
     markedDateTimeStr = db.StringField()
+    correct = db.StringField()
 
     def to_json(self):
         return jsonify(
@@ -274,8 +282,16 @@ class Quenswers(db.Document):
                 "Quiz OBJ ID": self.quizId,
                 "Marker ID": self.markedBy,
                 "Marked Date Time String": self.markedDateTimeStr,
+                "Correct": self.correct,
             }
         )
+
+    @property
+    def marked(self):
+        if self.markedBy == "None":
+            return False
+        else:
+            return True
 
 
 # '' : self. ,
@@ -291,6 +307,22 @@ class BadRequestError(Exception):
 
     def __str__(self):
         return "The request was bad"
+
+
+class UserAlreadyExist(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "A user with that email already exists"
+
+
+class UserDeleted(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "That user is deleted"
 
 
 class ResourceNotFound(Exception):
@@ -548,6 +580,7 @@ def submitAnswer(data):
         quizId=quizEnv.roomId,
         markedBy="None",
         markedDateTimeStr="None",
+        correct="unMarked",
     )
     thisAnswer.save()
     # checks to see if this answer was the last one for the quizEnv
@@ -757,7 +790,8 @@ def finishQuiz(data):
     )
     quiz.save()
     quizEnv.delete()
-    # TODO include a way of assigning all of the quenswer IDs to the Quiz document
+    assignQuenswersToQuiz(quiz)
+    # TODO make the server attempt at self marking
 
 
 ############################
@@ -860,6 +894,14 @@ def getUsers():
 def createHostUser():
     requestData = request.get_json()
     try:
+        if UserType.objects(email=requestData["email"]).first().firstName != "None":
+            if (
+                UserType.objects(email=requestData["email"]).first().hostOrTest
+                == "deleted"
+            ):
+                raise UserDeleted()
+            else:
+                raise UserAlreadyExist()
         hostUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
@@ -871,6 +913,12 @@ def createHostUser():
             hostOrTest="host",
         )
         hostUser.save()
+    except UserDeleted as ud:
+        print(ud)
+        return (jsonify("User is registered as deleted"), 400)
+    except UserAlreadyExist as uae:
+        print(uae)
+        return (jsonify("User already exists"), 400)
     except Exception as e:
         print("There was an error in this request")
         print(e)
@@ -886,17 +934,31 @@ def createHostUser():
 def createTestUser():
     requestData = request.get_json()
     try:
+        if UserType.objects(email=requestData["email"]).first().firstName != "None":
+            if (
+                UserType.objects(email=requestData["email"]).first().hostOrTest
+                == "deleted"
+            ):
+                raise UserDeleted()
+            else:
+                raise UserAlreadyExist()
         testUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
             email=requestData["email"],
-            passwordHash=requestData["email"],
+            passwordHash=requestData["passwordHash"],
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
             lastSignIn=datetime.datetime.now(),
-            hostOrTest="test",
+            hostOrTest="host",
         )
         testUser.save()
+    except UserDeleted as ud:
+        print(ud)
+        return (jsonify("User is registered as deleted"), 400)
+    except UserAlreadyExist as uae:
+        print(uae)
+        return (jsonify("User already exists"), 400)
     except Exception as e:
         print("There was an error in this request")
         print(e)
@@ -1219,6 +1281,48 @@ def getAllQuizzes():
     return (jsonify(Quizzes.objects), 200)
 
 
+@app.route("/marking", methods=["GET"])
+def markingGet():
+    op = {}
+    x = 0
+    requestData = request.get_json()
+    id = requestData["id"]
+    quiz = Quizzes.objects(id=id).first()
+    for quenswerId in quiz.quenswerId:
+        quensObj = Quenswers.objects(id=quenswerId).first()
+        questObj = Question.objects(id=quensObj.questionId).first()
+        userObj = UserType.objects(id=quensObj.userId).first()
+        userOp = {
+            "firstName": userObj.firstName,
+            "lastName": userObj.lastName,
+            "email": userObj.email,
+            "hostOrTest": userObj.hostOrTest,
+            "id": str(userObj.pk),
+        }
+        op[x] = {}
+        op[x]["quenswer"] = quensObj
+        op[x]["question"] = questObj
+        op[x]["user"] = userOp
+
+        x += 1
+
+    return jsonify(op)
+
+
+@app.route("/marking", methods=["PUT"])
+def putMarking():
+    requestData = request.get_json()
+    quenswerId = requestData["quenswerId"]
+    userId = requestData["userId"]
+    correct = requestData["correct"]
+    quenswer = Quenswers.objects(id=quenswerId).first()
+    quenswer.markedBy = userId
+    quenswer.markedDateTimeStr = str(datetime.datetime.now())
+    quenswer.correct = correct
+    quenswer.save()
+    return (jsonify(quenswer), 200)
+
+
 ############################################
 # SERVER TESTING EVENTS AND HTTP ENDPOINTS #
 ############################################
@@ -1246,6 +1350,25 @@ def serverTesting1():
     return "the server can still handle requests"
 
 
-# runs server
+#######################
+# API LOGIC FUNCTIONS #
+#######################
+
+
+def assignQuenswersToQuiz(quiz):
+    print("trying to asssign quenswers")
+    for quenswer in Quenswers.objects:
+        if quenswer.quizId == quiz.roomId:
+
+            quiz.quenswerId.append(str(quenswer.pk))
+
+    quiz.save()
+    return None
+
+
+###############
+# RUNS SERVER #
+###############
+
 if __name__ == "__main__":
     socketio.run(app, port=5000, debug=True)
