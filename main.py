@@ -262,7 +262,7 @@ class ActiveRooms(db.Document):
 class Quenswers(db.Document):
     userId = db.StringField()
     questionId = db.StringField()
-    answer = db.StringField()
+    answer = db.ListField()
     submitDateTime = db.DateTimeField()
     quizEnvId = db.StringField()
     quizId = db.StringField()
@@ -1276,6 +1276,12 @@ def deleteAllQuenswers():
         quenswer.delete()
     return "success"
 
+@app.route("/api/quizzes",methods=["GET"])
+def retrieveQuizzes():
+    quizID = request.args.get("id");
+    if quizID == None:
+        return jsonify(Quizzes.objects),200
+    return jsonify(Quizzes.objects(id=quizID).first()),200
 
 @app.route("/quizzes/all", methods=["GET"])
 def getAllQuizzes():
@@ -1284,11 +1290,9 @@ def getAllQuizzes():
 
 @app.route("/marking", methods=["GET"])
 def markingGet():
-    op = {}
-    x = 0
-    requestData = request.get_json()
-    id = requestData["id"]
-    quiz = Quizzes.objects(id=id).first()
+    op = []
+    quizID=request.args.get("id");
+    quiz = Quizzes.objects(id=quizID).first()
     for quenswerId in quiz.quenswerId:
         quensObj = Quenswers.objects(id=quenswerId).first()
         questObj = Question.objects(id=quensObj.questionId).first()
@@ -1300,12 +1304,7 @@ def markingGet():
             "hostOrTest": userObj.hostOrTest,
             "id": str(userObj.pk),
         }
-        op[x] = {}
-        op[x]["quenswer"] = quensObj
-        op[x]["question"] = questObj
-        op[x]["user"] = userOp
-
-        x += 1
+        op.append({"quenswer":quensObj,"question":questObj,"user":userOp})
 
     return jsonify(op)
 
