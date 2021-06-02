@@ -574,7 +574,7 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=str(data["Answer"]),
+        answer=data["Answer"],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
