@@ -9,3 +9,8 @@ def checkRoomExists(room):
 
 def registerRoomExists(room):
     CURRENT_QUIZZES[room] = 'active'
+
+def assertExists(A,B):
+    for item in A:
+        if not item in B: return False
+    return True
