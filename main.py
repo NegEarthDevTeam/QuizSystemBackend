@@ -889,6 +889,57 @@ def getUsers():
 
     return jsonify(getAllUsers())
 
+# Combined route to create users
+@app.route("/api/users",methods=["POST"])
+def addNewUser():
+    requestData = request.get_json()
+    expectedData = ["email","firstName","lastName","type"]
+    # If no type, return;
+    if not ("type" in requestData): return "Insufficient data",400
+
+    # Check type is actually valid
+    if requestData["type"] != "host" and requestData["type"] != "test": return "Invalid data for `type`" , 400
+
+    if requestData["type"] == "host":
+        expectedData.append("passwordHash")
+    
+    # Check all the shit we need is actually there
+    expectedOut = True
+    for item in expectedData:
+        expectedOut = expectedOut and item in requestData
+        if not expectedOut: return "Insufficient data", 400
+
+    # Sanitise email & transform to lowercase to ensure consistency
+    sanitisedEmail = requestData["email"].lower().strip()
+
+    try:
+        # Check user doesn't already exist
+        attemptGetUser = UserType.objects(email=sanitisedEmail).first()
+        if attemptGetUser and attemptGetUser.hostOrTest =="deleted": raise UserDeleted()
+        if attemptGetUser != None: raise UserAlreadyExist()
+        
+        # All good, let's go ahead.
+        thisUser=UserType(
+            firstName=requestData["firstName"].strip(),
+            lastName=requestData["lastName"].strip(),
+            email=sanitisedEmail,
+            passwordHash=requestData["passwordHash"] if requestData["type"] == "host" else sanitisedEmail,
+            created=datetime.datetime.now(),
+            lastEdit=datetime.datetime.now(),
+            lastSignIn=datetime.datetime.now(),
+            hostOrTest=requestData["type"],
+        )
+        thisUser.save()
+        return jsonify(thisUser), 200
+    except UserDeleted as e:
+        print(e)
+        return "This email is currently assigned to a deleted user",400
+    except UserAlreadyExist as e:
+        print(e)
+        return "This email is already in use", 400
+    except Exception as e:
+        print(e)
+        return "There was an error with this request", 500
 
 # creates host users
 @app.route("/create/hostUser", methods=["POST"])
@@ -1087,16 +1138,15 @@ def createQuestion():
             imageURL=requestData["imageURL"],
         )
         question.save()
-    except Exception:
-        print("There was an error in this request")
+    except Exception as e:
+        print("There was an error in an /api/questions POST request")
+        print(e)
         return (jsonify("BAD REQUEST"), 400)
     else:
         return question.to_json()
 
 
 # Edits Question
-
-
 @app.route("/api/questions", methods=["PUT"])
 def editsQuestion():
     requestData = request.get_json()
@@ -1202,6 +1252,7 @@ def deletesCategories():
     else:
         return jsonify("success")
 
+<<<<<<< Updated upstream
 
 @app.route("/exception/badRequestError")
 def testBadRequestError():
@@ -1256,20 +1307,23 @@ def samCustomLogin():
     return "", 204
 
 
+=======
+@app.route("/api/rooms",methods=["DELETE"])
+>>>>>>> Stashed changes
 @app.route("/activeRooms/Delete/All", methods=["DELETE"])
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
     return "success"
 
-
+@app.route("/api/quizzes",methods=["DELETE"])
 @app.route("/quizzes/Delete/All", methods=["DELETE"])
 def deleteAllQuizzes():
     for quiz in Quizzes.objects:
         quiz.delete()
     return "success"
 
-
+@app.route("/api/quenswers",methods=["DELETE"])
 @app.route("/quenswers/Delete/All", methods=["DELETE"])
 def deleteAllQuenswers():
     for quenswer in Quenswers.objects:
@@ -1287,7 +1341,7 @@ def retrieveQuizzes():
 def getAllQuizzes():
     return (jsonify(Quizzes.objects), 200)
 
-
+@app.route("/api/marking",methods=["GET"])
 @app.route("/marking", methods=["GET"])
 def markingGet():
     op = []
