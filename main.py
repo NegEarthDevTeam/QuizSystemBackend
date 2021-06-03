@@ -1258,60 +1258,6 @@ def deletesCategories():
     else:
         return jsonify("success")
 
-@app.route("/exception/badRequestError")
-def testBadRequestError():
-    raise BadRequestError()
-
-
-@app.route("/set/", methods=["GET"])
-def set():
-    idVar = "this is my UIDIDIDIDI"
-    session["theID"] = idVar
-    # print(f"idVar is {idVar}")
-    return "ok"
-
-
-@app.route("/get/", methods=["GET"])
-def get():
-    yolo = request.args.get("doesnei")
-    print(yolo)
-    return jsonify(yolo)
-
-
-@app.route("/SAM/api/login", methods=["GET", "POST"])
-def samCustomLogin():
-    if request.method == "GET":
-        return jsonify(
-            {
-                "session": session.get("value", ""),
-                "user": current_user.firstName
-                if current_user.is_authenticated
-                else "anonymous",
-            }
-        )
-    data = request.get_json()
-    if "session" in data:
-        print("session in data")
-        session["value"] = data["session"]
-    elif "email" in data:
-        if data["email"]:
-            email = data["email"]
-            passwordHash = data["passwordHash"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
-            login_user(userObj)
-            print("login")
-            print(session.keys())
-            print(session.values())
-            return "login"
-        else:
-            logout_user()
-            print("logout")
-            return "logout"
-    print("things didnt go to plan")
-    return "", 204
-
-
-
 @app.route("/api/rooms",methods=["DELETE"])
 @app.route("/activeRooms/Delete/All", methods=["DELETE"])
 def deleteAllActiveRooms():
