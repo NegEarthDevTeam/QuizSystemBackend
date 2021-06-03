@@ -268,7 +268,7 @@ class Quenswers(db.Document):
     quizEnvId = db.StringField()
     quizId = db.StringField()
     markedBy = db.StringField()
-    markedDateTimeStr = db.StringField()
+    markedDateTime = db.DateTimeField()
     correct = db.StringField()
 
     def to_json(self):
@@ -282,7 +282,7 @@ class Quenswers(db.Document):
                 "Quiz Environment ID": self.quizEnvId,
                 "Quiz OBJ ID": self.quizId,
                 "Marker ID": self.markedBy,
-                "Marked Date Time String": self.markedDateTimeStr,
+                "Marked Date Time": self.markedDateTime,
                 "Correct": self.correct,
             }
         )
@@ -404,7 +404,7 @@ def login():
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
 
-                return (jsonify({"status": "success", "userID": userObj.get_id()}), 200)
+                return (jsonify({"status": "success", "userID": userObj.get_id(), "userName" : f"{userObj.firstName} {userObj.lastName}"}), 200)
             else:
                 return (jsonify("Username or password error"), 401)
 
@@ -577,7 +577,6 @@ def submitAnswer(data):
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
         markedBy="None",
-        markedDateTimeStr="None",
         correct="unMarked",
     )
     thisAnswer.save()
@@ -896,27 +895,26 @@ def getUsers():
     return jsonify(getAllUsers())
 
 # Combined route to create users
-@app.route("/api/users",methods=["POST"])
+@app.route("/api/user",methods=["POST"])
 def addNewUser():
     requestData = request.get_json()
+
+    # Assert that the right data has been sent
     expectedData = ["email","firstName","lastName","type"]
-    # If no type, return;
-    if not ("type" in requestData): return "Insufficient data",400
+
+    if not "type" in requestData: return ("Insufficent data",400)
 
     # Check type is actually valid
     if requestData["type"] != "host" and requestData["type"] != "test": return "Invalid data for `type`" , 400
 
     if requestData["type"] == "host":
         expectedData.append("passwordHash")
-    
-    # Check all the shit we need is actually there
-    expectedOut = True
-    for item in expectedData:
-        expectedOut = expectedOut and item in requestData
-        if not expectedOut: return "Insufficient data", 400
 
     # Sanitise email & transform to lowercase to ensure consistency
     sanitisedEmail = requestData["email"].lower().strip()
+
+    # Finally assert
+    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
 
     try:
         # Check user doesn't already exist
@@ -987,7 +985,6 @@ def createHostUser():
 
 # creates test users
 
-
 @app.route("/create/testUser", methods=["POST"])
 def createTestUser():
     requestData = request.get_json()
@@ -1024,7 +1021,7 @@ def createTestUser():
     else:
         return jsonify(testUser)
 
-
+@app.route("/api/user",methods=["PUT"])
 @app.route("/edit/user", methods=["PUT"])
 def createDeeTestUser():
     requestData = request.get_json()
@@ -1049,7 +1046,7 @@ def createDeeTestUser():
         testUser.save()
         return testUser.to_json()
 
-
+@app.route("/api/user",methods=["DELETE"])
 @app.route("/delete/user", methods=["DELETE"])
 def deleteUsers():
     requestData = request.get_json()
@@ -1067,7 +1064,7 @@ def deleteUsers():
 
 # checks user types
 
-
+@app.route("/api/user/check",methods=["POST"])
 @app.route("/check/userType", methods=["POST"])
 def checkUserType():
     request_data = request.get_json()
@@ -1295,6 +1292,7 @@ def getAllQuizzes():
 @app.route("/api/marking",methods=["GET"])
 @app.route("/marking", methods=["GET"])
 def markingGet():
+    print(request)
     op = []
     quizID = request.args.get("id")
     print(quizID)
@@ -1315,6 +1313,64 @@ def markingGet():
     print(op)
     return jsonify(op)
 
+# Batch mark quenswers by ID
+@app.route("/api/mark/",methods=["POST"])
+def batchMark():
+    requestData = request.get_json()
+    # Check necessary data
+    expectedData = ["userID","toMark"]
+    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
+
+    if len(requestData["toMark"]) < 1: return ("toMark cannot be empty",400)
+    returnValue = []
+    try:
+        for qid,outcome in requestData["toMark"].items():
+            thisQuenswer = Quenswers.objects(id=qid).first()
+            if thisQuenswer == None: return ("One or more quenswer IDs are invalid",400)
+            thisQuenswer.correct = "correct" if outcome else "incorrect"
+            thisQuenswer.markedBy = requestData["userID"]
+            # thisQuenswer.markedDateTime = datetime.datetime.now(),
+            thisQuenswer.save()
+            returnValue.append(thisQuenswer)
+        return jsonify(returnValue), 200
+    except Exception as e:
+        print(f"Exception raised at endpoint {request.url_rule}:")
+        print(e)
+
+# 'Mark' an individual quenswer by ID
+@app.route("/api/quenswer/<qid>/mark",methods=["POST"])
+def markQuenswer(qid):
+    requestData = request.get_json()
+    # check necessary data 
+    expectedData = ["correct","userID"]
+    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
+
+    # Send shite
+    try:
+        thisQuenswer = Quenswers.objects(id=qid).first()
+        if thisQuenswer == None: return "No quenswer exists with that ID",400
+        thisQuenswer.correct = requestData["correct"]
+        thisQuenswer.markedBy = requestData["userID"]
+        # thisQuenswer.markedDateTime = datetime.datetime.now(),
+        thisQuenswer.save()
+        return jsonify(thisQuenswer), 200
+    except Exception as e:
+        print("Encountered exception on route /api/quenswer/<qid>/mark")
+        print(e)
+        return "Server encountered an error",500
+
+# Get an individual quenswer by ID
+@app.route("/api/quenswer/<qid>",methods=["GET"])
+def getQuenswer(qid):
+    try:
+        thisQuenswer = Quenswers.objects(id=qid).first()
+        if thisQuenswer == None: return "No results for that ID", 400
+        return jsonify(thisQuenswer), 200
+    except Exception as e:
+        print("Encountered exception on route /api/quenswer/<qid>")
+        print(e)
+        return "Server encountered an error",500
+
 
 @app.route("/marking", methods=["PUT"])
 def putMarking():
@@ -1324,8 +1380,8 @@ def putMarking():
     correct = requestData["correct"]
     quenswer = Quenswers.objects(id=quenswerId).first()
     quenswer.markedBy = userId
-    quenswer.markedDateTimeStr = str(datetime.datetime.now())
-    quenswer.correct = correct
+    quenswer.markedDateTime = datetime.datetime.now()
+    quenswer.correct = "correct" if correct else "incorrect"
     quenswer.save()
     return (jsonify(quenswer), 200)
 
