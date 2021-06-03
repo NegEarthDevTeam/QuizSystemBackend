@@ -234,6 +234,7 @@ class ActiveRooms(db.Document):
     quizStarted = db.StringField()
     questions = db.ListField()
     allQuestions = db.ListField()
+    questionCompleted = db.ListField()
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
     lastQuestion = db.StringField()
@@ -482,6 +483,9 @@ def createRoom(data):
     timeLimit = data["timeLimit"]
     requestUserId = data["userID"]
     quizStarted = "False"
+    questionCompleted = []
+    for question in questions:
+        questionCompleted.append("")
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -489,6 +493,7 @@ def createRoom(data):
         dateTime=datetime.datetime.now(),
         questions=questions,
         allQuestions=questions,
+        questionCompleted=questionCompleted,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
         currentQuestion="initiateStr",
@@ -567,7 +572,7 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(data["Answer"],list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -585,8 +590,17 @@ def submitAnswer(data):
         % (len(quizEnv.connectedUserId) - 1)
         == 0
     ):
-        emit("questionTimeout", to=roomId)
-        print("emiting timeout")
+        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+            quizEnvUpToDate.currentQuestion
+        )
+        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+            pass
+        else:
+            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+            quizEnvUpToDate.save()
+            print("server woke, emiting timeout")
+            emit("questionTimeout", to=roomId)
     else:
         print("still more users to answer")
 
@@ -673,6 +687,7 @@ def startQuiz(data):
     else:
         print(op)
 
+
 @socketio.event
 def sendQuestion(data):
     try:
@@ -748,15 +763,24 @@ def sendQuestion(data):
         emit("receiveQuestion", op, to=thisRoom)
         print(f"server sleeping for {quizEnv.timeLimit} seconds")
         socketio.sleep(quizEnv.timeLimit)
-        print("server woke, emiting timeout")
-        emit("questionTimeout", to=thisRoom)
-        # print(op)
+        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+            quizEnvUpToDate.currentQuestion
+        )
+        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+            pass
+        else:
+            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+            quizEnvUpToDate.save()
+            print("server woke, emiting timeout")
+            emit("questionTimeout", to=thisRoom)
+        #   print(op)
 
 
 @socketio.event
 def finishQuiz(data):
     print("finish quiz")
-    room = data['room']
+    room = data["room"]
     # close_room(room)
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -777,7 +801,7 @@ def finishQuiz(data):
     )
     quiz.save()
     quizEnv.delete()
-    emit("notifyFinishQuiz",to=room)
+    emit("notifyFinishQuiz", to=room)
     assignQuenswersToQuiz(quiz)
     # TODO make the server attempt at self marking
 
@@ -826,7 +850,6 @@ def onRoomUpdated(roomId):
 #################
 # API ENDPOINTS #
 #################
-
 
 
 # GET Users
@@ -1185,6 +1208,7 @@ def deletesCategories():
     else:
         return jsonify("success")
 
+
 @app.route("/activeRooms/Delete/All", methods=["DELETE"])
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
@@ -1205,12 +1229,14 @@ def deleteAllQuenswers():
         quenswer.delete()
     return "success"
 
-@app.route("/api/quizzes",methods=["GET"])
+
+@app.route("/api/quizzes", methods=["GET"])
 def retrieveQuizzes():
-    quizID = request.args.get("id");
+    quizID = request.args.get("id")
     if quizID == None:
-        return jsonify(Quizzes.objects),200
-    return jsonify(Quizzes.objects(id=quizID).first()),200
+        return jsonify(Quizzes.objects), 200
+    return jsonify(Quizzes.objects(id=quizID).first()), 200
+
 
 @app.route("/quizzes/all", methods=["GET"])
 def getAllQuizzes():
@@ -1220,7 +1246,8 @@ def getAllQuizzes():
 @app.route("/marking", methods=["GET"])
 def markingGet():
     op = []
-    quizID=request.args.get("id");
+    quizID = request.args.get("id")
+    print(quizID)
     quiz = Quizzes.objects(id=quizID).first()
     for quenswerId in quiz.quenswerId:
         quensObj = Quenswers.objects(id=quenswerId).first()
@@ -1233,8 +1260,9 @@ def markingGet():
             "hostOrTest": userObj.hostOrTest,
             "id": str(userObj.pk),
         }
-        op.append({"quenswer":quensObj,"question":questObj,"user":userOp})
-
+        op.append({"quenswer": quensObj, "question": questObj, "user": userOp})
+    print("this is the output of marking GET")
+    print(op)
     return jsonify(op)
 
 
@@ -1278,6 +1306,7 @@ def serverTesting1():
     )
     return "the server can still handle requests"
 
+
 @app.route("/exception/badRequestError")
 def testBadRequestError():
     raise BadRequestError()
@@ -1296,6 +1325,7 @@ def get():
     yolo = request.args.get("doesnei")
     print(yolo)
     return jsonify(yolo)
+
 
 @app.route("/SAM/api/login", methods=["GET", "POST"])
 def samCustomLogin():
@@ -1328,6 +1358,7 @@ def samCustomLogin():
             return "logout"
     print("things didnt go to plan")
     return "", 204
+
 
 # test route
 @app.route("/sm")
