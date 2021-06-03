@@ -404,7 +404,16 @@ def login():
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
 
-                return (jsonify({"status": "success", "userID": userObj.get_id(), "userName" : f"{userObj.firstName} {userObj.lastName}"}), 200)
+                return (
+                    jsonify(
+                        {
+                            "status": "success",
+                            "userID": userObj.get_id(),
+                            "userName": f"{userObj.firstName} {userObj.lastName}",
+                        }
+                    ),
+                    200,
+                )
             else:
                 return (jsonify("Username or password error"), 401)
 
@@ -789,9 +798,6 @@ def finishQuiz(data):
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
 
-    for quenswer in Quenswers.objects():
-        pass
-
     quiz = Quizzes(
         roomId=quizEnv.roomId,
         allConnectedUsers=quizEnv.allConnectedUsers,
@@ -900,18 +906,21 @@ def getUsers():
 
     return jsonify(getAllUsers())
 
+
 # Combined route to create users
-@app.route("/api/user",methods=["POST"])
+@app.route("/api/user", methods=["POST"])
 def addNewUser():
     requestData = request.get_json()
 
     # Assert that the right data has been sent
-    expectedData = ["email","firstName","lastName","type"]
+    expectedData = ["email", "firstName", "lastName", "type"]
 
-    if not "type" in requestData: return ("Insufficent data",400)
+    if not "type" in requestData:
+        return ("Insufficent data", 400)
 
     # Check type is actually valid
-    if requestData["type"] != "host" and requestData["type"] != "test": return "Invalid data for `type`" , 400
+    if requestData["type"] != "host" and requestData["type"] != "test":
+        return "Invalid data for `type`", 400
 
     if requestData["type"] == "host":
         expectedData.append("passwordHash")
@@ -920,20 +929,25 @@ def addNewUser():
     sanitisedEmail = requestData["email"].lower().strip()
 
     # Finally assert
-    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
+    if not logic.assertExists(expectedData, requestData):
+        return ("Insufficent data", 400)
 
     try:
         # Check user doesn't already exist
         attemptGetUser = UserType.objects(email=sanitisedEmail).first()
-        if attemptGetUser and attemptGetUser.hostOrTest =="deleted": raise UserDeleted()
-        if attemptGetUser != None: raise UserAlreadyExist()
-        
+        if attemptGetUser and attemptGetUser.hostOrTest == "deleted":
+            raise UserDeleted()
+        if attemptGetUser != None:
+            raise UserAlreadyExist()
+
         # All good, let's go ahead.
-        thisUser=UserType(
+        thisUser = UserType(
             firstName=requestData["firstName"].strip(),
             lastName=requestData["lastName"].strip(),
             email=sanitisedEmail,
-            passwordHash=requestData["passwordHash"] if requestData["type"] == "host" else sanitisedEmail,
+            passwordHash=requestData["passwordHash"]
+            if requestData["type"] == "host"
+            else sanitisedEmail,
             created=datetime.datetime.now(),
             lastEdit=datetime.datetime.now(),
             lastSignIn=datetime.datetime.now(),
@@ -943,13 +957,14 @@ def addNewUser():
         return jsonify(thisUser), 200
     except UserDeleted as e:
         print(e)
-        return "This email is currently assigned to a deleted user",400
+        return "This email is currently assigned to a deleted user", 400
     except UserAlreadyExist as e:
         print(e)
         return "This email is already in use", 400
     except Exception as e:
         print(e)
         return "There was an error with this request", 500
+
 
 # creates host users
 @app.route("/create/hostUser", methods=["POST"])
@@ -991,6 +1006,7 @@ def createHostUser():
 
 # creates test users
 
+
 @app.route("/create/testUser", methods=["POST"])
 def createTestUser():
     requestData = request.get_json()
@@ -1027,7 +1043,8 @@ def createTestUser():
     else:
         return jsonify(testUser)
 
-@app.route("/api/user",methods=["PUT"])
+
+@app.route("/api/user", methods=["PUT"])
 @app.route("/edit/user", methods=["PUT"])
 def createDeeTestUser():
     requestData = request.get_json()
@@ -1052,7 +1069,8 @@ def createDeeTestUser():
         testUser.save()
         return testUser.to_json()
 
-@app.route("/api/user",methods=["DELETE"])
+
+@app.route("/api/user", methods=["DELETE"])
 @app.route("/delete/user", methods=["DELETE"])
 def deleteUsers():
     requestData = request.get_json()
@@ -1070,7 +1088,8 @@ def deleteUsers():
 
 # checks user types
 
-@app.route("/api/user/check",methods=["POST"])
+
+@app.route("/api/user/check", methods=["POST"])
 @app.route("/check/userType", methods=["POST"])
 def checkUserType():
     request_data = request.get_json()
@@ -1261,21 +1280,24 @@ def deletesCategories():
     else:
         return jsonify("success")
 
-@app.route("/api/rooms",methods=["DELETE"])
+
+@app.route("/api/rooms", methods=["DELETE"])
 @app.route("/activeRooms/Delete/All", methods=["DELETE"])
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
     return "success"
 
-@app.route("/api/quizzes",methods=["DELETE"])
+
+@app.route("/api/quizzes", methods=["DELETE"])
 @app.route("/quizzes/Delete/All", methods=["DELETE"])
 def deleteAllQuizzes():
     for quiz in Quizzes.objects:
         quiz.delete()
     return "success"
 
-@app.route("/api/quenswers",methods=["DELETE"])
+
+@app.route("/api/quenswers", methods=["DELETE"])
 @app.route("/quenswers/Delete/All", methods=["DELETE"])
 def deleteAllQuenswers():
     for quenswer in Quenswers.objects:
@@ -1295,7 +1317,8 @@ def retrieveQuizzes():
 def getAllQuizzes():
     return (jsonify(Quizzes.objects), 200)
 
-@app.route("/api/marking",methods=["GET"])
+
+@app.route("/api/marking", methods=["GET"])
 @app.route("/marking", methods=["GET"])
 def markingGet():
     print(request)
@@ -1320,20 +1343,24 @@ def markingGet():
     print(op)
     return jsonify(op)
 
+
 # Batch mark quenswers by ID
-@app.route("/api/mark/",methods=["POST"])
+@app.route("/api/mark/", methods=["POST"])
 def batchMark():
     requestData = request.get_json()
     # Check necessary data
-    expectedData = ["userID","toMark"]
-    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
+    expectedData = ["userID", "toMark"]
+    if not logic.assertExists(expectedData, requestData):
+        return ("Insufficent data", 400)
 
-    if len(requestData["toMark"]) < 1: return ("toMark cannot be empty",400)
+    if len(requestData["toMark"]) < 1:
+        return ("toMark cannot be empty", 400)
     returnValue = []
     try:
-        for qid,outcome in requestData["toMark"].items():
+        for qid, outcome in requestData["toMark"].items():
             thisQuenswer = Quenswers.objects(id=qid).first()
-            if thisQuenswer == None: return ("One or more quenswer IDs are invalid",400)
+            if thisQuenswer == None:
+                return ("One or more quenswer IDs are invalid", 400)
             thisQuenswer.correct = "correct" if outcome else "incorrect"
             thisQuenswer.markedBy = requestData["userID"]
             # thisQuenswer.markedDateTime = datetime.datetime.now(),
@@ -1344,18 +1371,21 @@ def batchMark():
         print(f"Exception raised at endpoint {request.url_rule}:")
         print(e)
 
+
 # 'Mark' an individual quenswer by ID
-@app.route("/api/quenswer/<qid>/mark",methods=["POST"])
+@app.route("/api/quenswer/<qid>/mark", methods=["POST"])
 def markQuenswer(qid):
     requestData = request.get_json()
-    # check necessary data 
-    expectedData = ["correct","userID"]
-    if not logic.assertExists(expectedData,requestData): return ("Insufficent data",400)
+    # check necessary data
+    expectedData = ["correct", "userID"]
+    if not logic.assertExists(expectedData, requestData):
+        return ("Insufficent data", 400)
 
     # Send shite
     try:
         thisQuenswer = Quenswers.objects(id=qid).first()
-        if thisQuenswer == None: return "No quenswer exists with that ID",400
+        if thisQuenswer == None:
+            return "No quenswer exists with that ID", 400
         thisQuenswer.correct = requestData["correct"]
         thisQuenswer.markedBy = requestData["userID"]
         # thisQuenswer.markedDateTime = datetime.datetime.now(),
@@ -1364,19 +1394,21 @@ def markQuenswer(qid):
     except Exception as e:
         print("Encountered exception on route /api/quenswer/<qid>/mark")
         print(e)
-        return "Server encountered an error",500
+        return "Server encountered an error", 500
+
 
 # Get an individual quenswer by ID
-@app.route("/api/quenswer/<qid>",methods=["GET"])
+@app.route("/api/quenswer/<qid>", methods=["GET"])
 def getQuenswer(qid):
     try:
         thisQuenswer = Quenswers.objects(id=qid).first()
-        if thisQuenswer == None: return "No results for that ID", 400
+        if thisQuenswer == None:
+            return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
         print("Encountered exception on route /api/quenswer/<qid>")
         print(e)
-        return "Server encountered an error",500
+        return "Server encountered an error", 500
 
 
 @app.route("/marking", methods=["PUT"])
@@ -1501,12 +1533,14 @@ def assignQuenswersToQuiz(quiz):
 def markTrueFalse(quenswerObj, questionObj):
     if quenswerObj.answer[0] == questionObj.answer[0]:
         quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.markedDateTime = datetime.datetime.now()
         quenswerObj.correct = "true"
+        quenswerObj.save()
     else:
         quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.markedDateTime = datetime.datetime.now()
         quenswerObj.correct = "false"
+        quenswerObj.save()
 
 
 def markMultiple(quenswerObj, questionObj):
@@ -1514,45 +1548,54 @@ def markMultiple(quenswerObj, questionObj):
         for userAnswer in quenswerObj.answer:
             if userAnswer in questionObj.answer:
                 quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTimeStr = datetime.datetime.now()
+                quenswerObj.markedDateTime = datetime.datetime.now()
                 quenswerObj.correct = "true"
+                quenswerObj.save()
             else:
                 quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTimeStr = datetime.datetime.now()
+                quenswerObj.markedDateTime = datetime.datetime.now()
                 quenswerObj.correct = "false"
-            # do some shiz for multiple multiples
+                quenswerObj.save()
     else:
         if quenswerObj.answer[0] == questionObj.answer[0]:
             quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTimeStr = datetime.datetime.now()
+            quenswerObj.markedDateTime = datetime.datetime.now()
             quenswerObj.correct = "true"
+            quenswerObj.save()
         else:
             quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTimeStr = datetime.datetime.now()
+            quenswerObj.markedDateTime = datetime.datetime.now()
             quenswerObj.correct = "false"
+            quenswerObj.save()
 
 
 def markNumber(quenswerObj, questionObj):
     if quenswerObj.answer[0] == questionObj.answer[0]:
         quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.markedDateTime = datetime.datetime.now()
         quenswerObj.correct = "true"
+        quenswerObj.save()
     else:
         quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.markedDateTime = datetime.datetime.now()
         quenswerObj.correct = "false"
+        quenswerObj.save()
 
 
 def autoMarking(quiz):
+    print("trying to self mark")
     for quenswerId in quiz.quenswerId:
         quenswerObj = Quenswers.objects(id=quenswerId).first()
-        questionObj = Question.objects(id=quenswerObj.questionId)
+        questionObj = Question.objects(id=quenswerObj.questionId).first()
         if questionObj.questionType == "trueFalse" or "multiple" or "number":
-            if quenswerObj.questionType == "trueFalse":
+            if questionObj.questionType == "trueFalse":
+                print("marking true false")
                 markTrueFalse(quenswerObj, questionObj)
-            elif quenswerObj.questionType == "multiple":
+            elif questionObj.questionType == "multiple":
+                print("marking multiple")
                 markMultiple(quenswerObj, questionObj)
-            elif quenswerObj.questionType == "number":
+            elif questionObj.questionType == "number":
+                print("marking number")
                 markNumber(quenswerObj, questionObj)
         else:
             pass
