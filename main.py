@@ -234,6 +234,7 @@ class ActiveRooms(db.Document):
     quizStarted = db.StringField()
     questions = db.ListField()
     allQuestions = db.ListField()
+    questionCompleted = db.ListField()
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
     lastQuestion = db.StringField()
@@ -464,13 +465,6 @@ def apiIsUserLoggedIn():
 # Socket IO Events #
 ####################
 
-
-@app.route("/socketIO/API/createRoom", methods=["POST"])
-def forward():
-    print(f" the current user is: {current_user.firstName} {current_user.lastName}")
-    return "1"  # createRoom()
-
-
 # @app.route('/socketIO/API/createRoom2', methods=["POST"])
 @socketio.on("createRoom")
 def createRoom(data):
@@ -489,6 +483,9 @@ def createRoom(data):
     timeLimit = data["timeLimit"]
     requestUserId = data["userID"]
     quizStarted = "False"
+    questionCompleted = []
+    for question in questions:
+        questionCompleted.append("")
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -496,6 +493,7 @@ def createRoom(data):
         dateTime=datetime.datetime.now(),
         questions=questions,
         allQuestions=questions,
+        questionCompleted=questionCompleted,
         timeLimit=timeLimit,
         quizStarted=quizStarted,
         currentQuestion="initiateStr",
@@ -574,7 +572,7 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"],
+        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -592,8 +590,17 @@ def submitAnswer(data):
         % (len(quizEnv.connectedUserId) - 1)
         == 0
     ):
-        emit("questionTimeout", to=roomId)
-        print("emiting timeout")
+        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+            quizEnvUpToDate.currentQuestion
+        )
+        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+            pass
+        else:
+            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+            quizEnvUpToDate.save()
+            print("server woke, emiting timeout")
+            emit("questionTimeout", to=roomId)
     else:
         print("still more users to answer")
 
@@ -682,11 +689,6 @@ def startQuiz(data):
 
 
 @socketio.event
-def prepareNextQuestion(data):
-    emit("prepareNextQuestion", "data")
-
-
-@socketio.event
 def sendQuestion(data):
     try:
         print("sendQuestionEvent")
@@ -761,15 +763,24 @@ def sendQuestion(data):
         emit("receiveQuestion", op, to=thisRoom)
         print(f"server sleeping for {quizEnv.timeLimit} seconds")
         socketio.sleep(quizEnv.timeLimit)
-        print("server woke, emiting timeout")
-        emit("questionTimeout", to=thisRoom)
-        # print(op)
+        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+            quizEnvUpToDate.currentQuestion
+        )
+        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+            pass
+        else:
+            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+            quizEnvUpToDate.save()
+            print("server woke, emiting timeout")
+            emit("questionTimeout", to=thisRoom)
+        #   print(op)
 
 
 @socketio.event
 def finishQuiz(data):
     print("finish quiz")
-    room = data['room']
+    room = data["room"]
     # close_room(room)
     curUserId = data["userID"]
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
@@ -790,7 +801,7 @@ def finishQuiz(data):
     )
     quiz.save()
     quizEnv.delete()
-    emit("notifyFinishQuiz",to=room)
+    emit("notifyFinishQuiz", to=room)
     assignQuenswersToQuiz(quiz)
     # TODO make the server attempt at self marking
 
@@ -839,11 +850,6 @@ def onRoomUpdated(roomId):
 #################
 # API ENDPOINTS #
 #################
-
-# test route
-@app.route("/sm")
-def sm():
-    return ("yep", 200)
 
 
 # GET Users
@@ -1203,6 +1209,104 @@ def deletesCategories():
         return jsonify("success")
 
 
+@app.route("/activeRooms/Delete/All", methods=["DELETE"])
+def deleteAllActiveRooms():
+    for room in ActiveRooms.objects:
+        room.delete()
+    return "success"
+
+
+@app.route("/quizzes/Delete/All", methods=["DELETE"])
+def deleteAllQuizzes():
+    for quiz in Quizzes.objects:
+        quiz.delete()
+    return "success"
+
+
+@app.route("/quenswers/Delete/All", methods=["DELETE"])
+def deleteAllQuenswers():
+    for quenswer in Quenswers.objects:
+        quenswer.delete()
+    return "success"
+
+
+@app.route("/api/quizzes", methods=["GET"])
+def retrieveQuizzes():
+    quizID = request.args.get("id")
+    if quizID == None:
+        return jsonify(Quizzes.objects), 200
+    return jsonify(Quizzes.objects(id=quizID).first()), 200
+
+
+@app.route("/quizzes/all", methods=["GET"])
+def getAllQuizzes():
+    return (jsonify(Quizzes.objects), 200)
+
+
+@app.route("/marking", methods=["GET"])
+def markingGet():
+    op = []
+    quizID = request.args.get("id")
+    print(quizID)
+    quiz = Quizzes.objects(id=quizID).first()
+    for quenswerId in quiz.quenswerId:
+        quensObj = Quenswers.objects(id=quenswerId).first()
+        questObj = Question.objects(id=quensObj.questionId).first()
+        userObj = UserType.objects(id=quensObj.userId).first()
+        userOp = {
+            "firstName": userObj.firstName,
+            "lastName": userObj.lastName,
+            "email": userObj.email,
+            "hostOrTest": userObj.hostOrTest,
+            "id": str(userObj.pk),
+        }
+        op.append({"quenswer": quensObj, "question": questObj, "user": userOp})
+    print("this is the output of marking GET")
+    print(op)
+    return jsonify(op)
+
+
+@app.route("/marking", methods=["PUT"])
+def putMarking():
+    requestData = request.get_json()
+    quenswerId = requestData["quenswerId"]
+    userId = requestData["userId"]
+    correct = requestData["correct"]
+    quenswer = Quenswers.objects(id=quenswerId).first()
+    quenswer.markedBy = userId
+    quenswer.markedDateTimeStr = str(datetime.datetime.now())
+    quenswer.correct = correct
+    quenswer.save()
+    return (jsonify(quenswer), 200)
+
+
+############################################
+# SERVER TESTING EVENTS AND HTTP ENDPOINTS #
+############################################
+
+
+@socketio.event
+def startServer7Test():
+    print("server test started")
+    # print(data)
+    print("socket sleeping for 30 seconds")
+    socketio.sleep(30)
+    print("socket waking")
+    emit("ServerTestFinished", "the server finished testing")
+
+
+@app.route("/server/testing1", methods=["GET"])
+def serverTesting1():
+    print(
+        """
+    #########################
+    # THE SERVER IS TESTING #
+    #########################
+    """
+    )
+    return "the server can still handle requests"
+
+
 @app.route("/exception/badRequestError")
 def testBadRequestError():
     raise BadRequestError()
@@ -1256,98 +1360,10 @@ def samCustomLogin():
     return "", 204
 
 
-@app.route("/activeRooms/Delete/All", methods=["DELETE"])
-def deleteAllActiveRooms():
-    for room in ActiveRooms.objects:
-        room.delete()
-    return "success"
-
-
-@app.route("/quizzes/Delete/All", methods=["DELETE"])
-def deleteAllQuizzes():
-    for quiz in Quizzes.objects:
-        quiz.delete()
-    return "success"
-
-
-@app.route("/quenswers/Delete/All", methods=["DELETE"])
-def deleteAllQuenswers():
-    for quenswer in Quenswers.objects:
-        quenswer.delete()
-    return "success"
-
-@app.route("/api/quizzes",methods=["GET"])
-def retrieveQuizzes():
-    quizID = request.args.get("id");
-    if quizID == None:
-        return jsonify(Quizzes.objects),200
-    return jsonify(Quizzes.objects(id=quizID).first()),200
-
-@app.route("/quizzes/all", methods=["GET"])
-def getAllQuizzes():
-    return (jsonify(Quizzes.objects), 200)
-
-
-@app.route("/marking", methods=["GET"])
-def markingGet():
-    op = []
-    quizID=request.args.get("id");
-    quiz = Quizzes.objects(id=quizID).first()
-    for quenswerId in quiz.quenswerId:
-        quensObj = Quenswers.objects(id=quenswerId).first()
-        questObj = Question.objects(id=quensObj.questionId).first()
-        userObj = UserType.objects(id=quensObj.userId).first()
-        userOp = {
-            "firstName": userObj.firstName,
-            "lastName": userObj.lastName,
-            "email": userObj.email,
-            "hostOrTest": userObj.hostOrTest,
-            "id": str(userObj.pk),
-        }
-        op.append({"quenswer":quensObj,"question":questObj,"user":userOp})
-
-    return jsonify(op)
-
-
-@app.route("/marking", methods=["PUT"])
-def putMarking():
-    requestData = request.get_json()
-    quenswerId = requestData["quenswerId"]
-    userId = requestData["userId"]
-    correct = requestData["correct"]
-    quenswer = Quenswers.objects(id=quenswerId).first()
-    quenswer.markedBy = userId
-    quenswer.markedDateTimeStr = str(datetime.datetime.now())
-    quenswer.correct = correct
-    quenswer.save()
-    return (jsonify(quenswer), 200)
-
-
-############################################
-# SERVER TESTING EVENTS AND HTTP ENDPOINTS #
-############################################
-
-
-@socketio.event
-def startServer7Test():
-    print("server test started")
-    # print(data)
-    print("socket sleeping for 30 seconds")
-    socketio.sleep(30)
-    print("socket waking")
-    emit("ServerTestFinished", "the server finished testing")
-
-
-@app.route("/server/testing1", methods=["GET"])
-def serverTesting1():
-    print(
-        """
-    #########################
-    # THE SERVER IS TESTING #
-    #########################
-    """
-    )
-    return "the server can still handle requests"
+# test route
+@app.route("/sm")
+def sm():
+    return ("yep", 200)
 
 
 #######################
