@@ -520,6 +520,7 @@ def createRoom(data):
 # join room
 @socketio.on("join")
 def on_join(data):
+    #TODO check that the room isn't in session before allowing users to join a room, as if the quiz env has begun, it doesn't like users joining part way through
     username = data["username"]
     room = data["room"]
     join_room(room)
@@ -908,7 +909,7 @@ def getUsers():
 
 
 # Combined route to create users
-@app.route("/api/user", methods=["POST"])
+@app.route("/api/users", methods=["POST"])
 def addNewUser():
     requestData = request.get_json()
 
@@ -971,6 +972,7 @@ def addNewUser():
 def createHostUser():
     requestData = request.get_json()
     try:
+        
         if UserType.objects(email=requestData["email"]).first().firstName != "None":
             if (
                 UserType.objects(email=requestData["email"]).first().hostOrTest
@@ -979,6 +981,7 @@ def createHostUser():
                 raise UserDeleted()
             else:
                 raise UserAlreadyExist()
+                
         hostUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
@@ -1607,3 +1610,10 @@ def autoMarking(quiz):
 
 if __name__ == "__main__":
     socketio.run(app, port=5000, debug=True)
+
+
+#################
+# LIST OF TODOs #
+#################
+
+#TODO if a question is marked as first and last it will cause the server to not emit any questions
