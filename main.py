@@ -591,16 +591,18 @@ def submitAnswer(data):
         == 0
     ):
         quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
-        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
-            quizEnvUpToDate.currentQuestion
-        )
-        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+        if quizEnvUpToDate == None:
             pass
         else:
-            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
-            quizEnvUpToDate.save()
-            print("server woke, emiting timeout")
-            emit("questionTimeout", to=roomId)
+            currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+                quizEnvUpToDate.currentQuestion
+            )
+            if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+                pass
+            else:
+                quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+                quizEnvUpToDate.save()
+                emit("questionTimeout", to=roomId)
     else:
         print("still more users to answer")
 
@@ -764,16 +766,19 @@ def sendQuestion(data):
         print(f"server sleeping for {quizEnv.timeLimit} seconds")
         socketio.sleep(quizEnv.timeLimit)
         quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
-        currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
-            quizEnvUpToDate.currentQuestion
-        )
-        if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+        if quizEnvUpToDate == None:
             pass
         else:
-            quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
-            quizEnvUpToDate.save()
-            print("server woke, emiting timeout")
-            emit("questionTimeout", to=thisRoom)
+            currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
+                quizEnvUpToDate.currentQuestion
+            )
+            if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
+                pass
+            else:
+                quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
+                quizEnvUpToDate.save()
+                print("server woke, emiting timeout")
+                emit("questionTimeout", to=thisRoom)
         #   print(op)
 
 
@@ -1249,6 +1254,7 @@ def markingGet():
     quizID = request.args.get("id")
     print(quizID)
     quiz = Quizzes.objects(id=quizID).first()
+    print(quiz.quenswerId)
     for quenswerId in quiz.quenswerId:
         quensObj = Quenswers.objects(id=quenswerId).first()
         questObj = Question.objects(id=quensObj.questionId).first()
@@ -1278,6 +1284,13 @@ def putMarking():
     quenswer.correct = correct
     quenswer.save()
     return (jsonify(quenswer), 200)
+
+@app.route("/analytics/mostOftenWrong", methods=["GET"])
+def analyticsMostOftenWrongGET():
+    fefe
+
+
+    if 
 
 
 ############################################
