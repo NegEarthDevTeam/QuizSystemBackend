@@ -808,6 +808,7 @@ def finishQuiz(data):
     quizEnv.delete()
     emit("notifyFinishQuiz", to=room)
     assignQuenswersToQuiz(quiz)
+    autoMarking(quiz)
     # TODO make the server attempt at self marking
 
 
@@ -1285,12 +1286,10 @@ def putMarking():
     quenswer.save()
     return (jsonify(quenswer), 200)
 
+
 @app.route("/analytics/mostOftenWrong", methods=["GET"])
 def analyticsMostOftenWrongGET():
-    fefe
-
-
-    if 
+    pass
 
 
 ############################################
@@ -1388,11 +1387,69 @@ def assignQuenswersToQuiz(quiz):
     print("trying to asssign quenswers")
     for quenswer in Quenswers.objects:
         if quenswer.quizId == quiz.roomId:
-
             quiz.quenswerId.append(str(quenswer.pk))
-
     quiz.save()
     return None
+
+
+def markTrueFalse(quenswerObj, questionObj):
+    if quenswerObj.answer[0] == questionObj.answer[0]:
+        quenswerObj.markedBy = "system"
+        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.correct = "true"
+    else:
+        quenswerObj.markedBy = "system"
+        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.correct = "false"
+
+
+def markMultiple(quenswerObj, questionObj):
+    if len(questionObj.answer) >= 2:
+        for userAnswer in quenswerObj.answer:
+            if userAnswer in questionObj.answer:
+                quenswerObj.markedBy = "system"
+                quenswerObj.markedDateTimeStr = datetime.datetime.now()
+                quenswerObj.correct = "true"
+            else:
+                quenswerObj.markedBy = "system"
+                quenswerObj.markedDateTimeStr = datetime.datetime.now()
+                quenswerObj.correct = "false"
+            # do some shiz for multiple multiples
+    else:
+        if quenswerObj.answer[0] == questionObj.answer[0]:
+            quenswerObj.markedBy = "system"
+            quenswerObj.markedDateTimeStr = datetime.datetime.now()
+            quenswerObj.correct = "true"
+        else:
+            quenswerObj.markedBy = "system"
+            quenswerObj.markedDateTimeStr = datetime.datetime.now()
+            quenswerObj.correct = "false"
+
+
+def markNumber(quenswerObj, questionObj):
+    if quenswerObj.answer[0] == questionObj.answer[0]:
+        quenswerObj.markedBy = "system"
+        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.correct = "true"
+    else:
+        quenswerObj.markedBy = "system"
+        quenswerObj.markedDateTimeStr = datetime.datetime.now()
+        quenswerObj.correct = "false"
+
+
+def autoMarking(quiz):
+    for quenswerId in quiz.quenswerId:
+        quenswerObj = Quenswers.objects(id=quenswerId).first()
+        questionObj = Question.objects(id=quenswerObj.questionId)
+        if questionObj.questionType == "trueFalse" or "multiple" or "number":
+            if quenswerObj.questionType == "trueFalse":
+                markTrueFalse(quenswerObj, questionObj)
+            elif quenswerObj.questionType == "multiple":
+                markMultiple(quenswerObj, questionObj)
+            elif quenswerObj.questionType == "number":
+                markNumber(quenswerObj, questionObj)
+        else:
+            pass
 
 
 ###############
