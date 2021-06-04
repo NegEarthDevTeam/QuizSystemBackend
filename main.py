@@ -1480,13 +1480,34 @@ def analyticsCategoriesQuestionsGet():
     requestData = request.get_json()
     categId = requestData["categId"]
     categObj = Categories.objects(id=categId).first()
-    print(categObj.name)
     correct = {}
     incorrect = {}
     for question in Question.objects(category=categObj.name):
         correct[str(question.pk)] = 0
         incorrect[str(question.pk)] = 0
         for quenswer in Quenswers.objects(questionId=str(question.pk)):
+            if quenswer.correct == "true":
+                correct[str(question.pk)] += 1
+            elif quenswer.correct == "false":
+                incorrect[str(question.pk)] += 1
+    return(jsonify({
+        "correct": correct,
+        "incorrect": incorrect
+    }))
+
+
+@app.route("/analytics/categories/user", methods=["GET"])
+def analyticsCategoriesUserGet():
+    requestData = request.get_json()
+    categId = requestData["categId"]
+    userId = requestData["userId"]
+    categObj = Categories.objects(id=categId).first()
+    correct = {}
+    incorrect = {}
+    for question in Question.objects(category=categObj.name):
+        correct[str(question.pk)] = 0
+        incorrect[str(question.pk)] = 0
+        for quenswer in Quenswers.objects(questionId=str(question.pk), userId=userId):
             if quenswer.correct == "true":
                 correct[str(question.pk)] += 1
             elif quenswer.correct == "false":
