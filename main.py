@@ -1446,11 +1446,6 @@ def putMarking():
     return (jsonify(quenswer), 200)
 
 
-@app.route("/analytics/mostOftenWrong", methods=["GET"])
-def analyticsMostOftenWrongGET():
-    pass
-
-
 @app.route("/analytics/user/questions", methods=["GET"])
 def analyticsUserCorrectQuestionsGet():
     requestData = request.get_json()
