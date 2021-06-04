@@ -569,14 +569,12 @@ def on_leave(data):
 
 @socketio.event
 def submitAnswer(data):
-    print("data")
-    print(data)
+    print("\033[93m== SUBMIT ANSWER ENDPOINT ==\033[0m")
+    print(f"Received data:")
+    for k,v in data.items():
+        print(f"{k} -> {v}")
     curUserId = data["userID"]["userID"]
-    print("submitAnswer")
     roomId = data["room"]["roomCode"]
-    print(f"roomID: {roomId}")
-    print(data)
-    print(curUserId)
     quizEnv = ActiveRooms.objects(roomId=roomId).first()
 
     thisAnswer = Quenswers(
@@ -591,11 +589,14 @@ def submitAnswer(data):
     )
     thisAnswer.save()
     # checks to see if this answer was the last one for the quizEnv
-    print(f".count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}")
+    thisCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
+    thisWeirdModulo = thisCount % (len(quizEnv.connectedUserId) - 1)
+    print(f"count is {thisCount}")
     print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
+    print(f"Whatever's sams weird modulo function is: {thisWeirdModulo}")
 
     if (
-        Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
+        thisCount
         % (len(quizEnv.connectedUserId) - 1)
         == 0
     ):
@@ -611,6 +612,7 @@ def submitAnswer(data):
             else:
                 quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
                 quizEnvUpToDate.save()
+                print("\033[92m== EMITTING TIMEOUT ==\033[0m")
                 emit("questionTimeout", to=roomId)
     else:
         print("still more users to answer")
@@ -663,7 +665,6 @@ def startQuiz(data):
             quizEnv.lastQuestion = "False"
 
         quizEnv.save()
-
         questionObj = Question.objects(id=curQuestion).first()
 
         if questionObj.questionType == "multiple":
@@ -702,15 +703,18 @@ def startQuiz(data):
 @socketio.event
 def sendQuestion(data):
     try:
-        print("sendQuestionEvent")
+        print("\033[93m== SEND QUESTION EVENT ==\033[0m")
+        print("Data recieved:")
+        for k,v in data.items():
+            print(f"{k} -> {v}")
+
         send("question was sent")
         op = {}
         roomId = data["room"]
-        print(roomId)
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
-        print(quizEnv.roomId)
+        print(f"Environment roomID: {quizEnv.roomId}")
         if quizEnv.lastQuestion == "True":
-            print("was last question")
+            print("This question was the last question")
             raise LastQuestion(quizEnv.roomId)
 
         print(f"questions list length is {len(quizEnv.questions)}")
@@ -772,7 +776,7 @@ def sendQuestion(data):
         print(type(op))
         print(op)
         emit("receiveQuestion", op, to=thisRoom)
-        print(f"server sleeping for {quizEnv.timeLimit} seconds")
+        print(f"\033[93m Sleeping for {quizEnv.timeLimit} seconds '\033[0m'")
         socketio.sleep(quizEnv.timeLimit)
         quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
         if quizEnvUpToDate == None:
@@ -786,7 +790,7 @@ def sendQuestion(data):
             else:
                 quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
                 quizEnvUpToDate.save()
-                print("server woke, emiting timeout")
+                print(f"\033[93m Question timed out, emitting event'\033[0m'")
                 emit("questionTimeout", to=thisRoom)
         #   print(op)
 
