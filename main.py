@@ -1,4 +1,5 @@
 from logging import error, exception
+from re import U
 from warnings import catch_warnings
 import logic
 import random
@@ -401,7 +402,8 @@ def login():
                 passwordHash = request_data["passwordHash"]
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -437,7 +439,8 @@ def socketLogin(data):
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -524,7 +527,7 @@ def createRoom(data):
 # join room
 @socketio.on("join")
 def on_join(data):
-    #TODO check that the room isn't in session before allowing users to join a room, as if the quiz env has begun, it doesn't like users joining part way through
+    # TODO check that the room isn't in session before allowing users to join a room, as if the quiz env has begun, it doesn't like users joining part way through
     username = data["username"]
     room = data["room"]
     join_room(room)
@@ -573,7 +576,7 @@ def on_leave(data):
 def submitAnswer(data):
     print("\033[93m== SUBMIT ANSWER EVENT ==\033[0m")
     print(f"Received data:")
-    for k,v in data.items():
+    for k, v in data.items():
         print(f"{k} -> {v}")
 
     curUserId = data["userID"]["userID"]
@@ -583,7 +586,8 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(
+            data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -592,9 +596,10 @@ def submitAnswer(data):
     thisAnswer.save()
 
     currentQuestion = quizEnv.currentQuestion
-    newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(questionId=currentQuestion).count()
+    newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(
+        questionId=currentQuestion).count()
 
-    if newCount >= (len(quizEnv.connectedUserId) -1 ):
+    if newCount >= (len(quizEnv.connectedUserId) - 1):
         print("We have received the same or more responses than connected users")
         print("\033[92m== EMITTING TIMEOUT - RECEIVED ALL ANSWERS ==\033[0m")
 
@@ -616,7 +621,7 @@ def submitAnswer(data):
 def startQuiz(data):
     print("\033[93m== START QUIZ EVENT ==\033[0m")
     print(f"Received data:")
-    for k,v in data.items():
+    for k, v in data.items():
         print(f"{k} -> {v}")
     curUserId = data["userID"]
     '''
@@ -700,7 +705,7 @@ def sendQuestion(data):
     try:
         print("\033[93m== SEND QUESTION EVENT ==\033[0m")
         print("Data recieved:")
-        for k,v in data.items():
+        for k, v in data.items():
             print(f"{k} -> {v}")
 
         # send("question was sent")
@@ -750,7 +755,8 @@ def sendQuestion(data):
         op["bodyMD"] = questionObj.bodyMD
         op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
-        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        op["finishQuestion"] = math.floor(
+            tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
         # print(type(op["finishQuestion"]))
         # print("finishQuestion")
@@ -782,7 +788,6 @@ def sendQuestion(data):
             print("\033[92m== EMITTING TIMEOUT - TIMER EXPIRED ==\033[0m")
             emit("questionTimeout", to=roomId)
             return
-        
 
         '''
         else:
@@ -890,7 +895,8 @@ def getUsers():
         op2 = []
         for user in UserType.objects(hostOrTest=type):
             op2.append(
-                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
+                UserType.objects(id=str(user.pk)).exclude(
+                    "passwordHash").first()
             )
         return op2
 
@@ -900,7 +906,8 @@ def getUsers():
         op3 = {}
         for user in UserType.objects:
             op3[user.get_id()] = (
-                UserType.objects(id=str(user.pk)).exclude("passwordHash").first()
+                UserType.objects(id=str(user.pk)).exclude(
+                    "passwordHash").first()
             )
         print(op3)
         return op3
@@ -981,7 +988,7 @@ def addNewUser():
 def createHostUser():
     requestData = request.get_json()
     try:
-        
+
         if UserType.objects(email=requestData["email"]).first().firstName != "None":
             if (
                 UserType.objects(email=requestData["email"]).first().hostOrTest
@@ -990,7 +997,7 @@ def createHostUser():
                 raise UserDeleted()
             else:
                 raise UserAlreadyExist()
-                
+
         hostUser = UserType(
             firstName=requestData["firstName"],
             lastName=requestData["lastName"],
@@ -1149,7 +1156,8 @@ def apiQuestionsGet():
             print(category.assocQuestions)
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(Question.objects(id=questionID).first())
+                op[category.name].append(
+                    Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1372,14 +1380,15 @@ def batchMark():
             thisQuenswer = Quenswers.objects(id=qid).first()
             if thisQuenswer == None:
                 return ("One or more quenswer IDs are invalid", 400)
-            thisQuenswer.correct = "correct" if outcome else "incorrect"
+            thisQuenswer.correct = "true" if outcome else "false"
             thisQuenswer.markedBy = requestData["userID"]
             # thisQuenswer.markedDateTime = datetime.datetime.now(),
             thisQuenswer.save()
             returnValue.append(thisQuenswer)
         return jsonify(returnValue), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(
+            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
 
 
@@ -1402,7 +1411,8 @@ def markQuenswer(qid):
         thisQuenswer.save()
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(
+            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1416,7 +1426,8 @@ def getQuenswer(qid):
             return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(
+            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1430,7 +1441,7 @@ def putMarking():
     quenswer = Quenswers.objects(id=quenswerId).first()
     quenswer.markedBy = userId
     quenswer.markedDateTime = datetime.datetime.now()
-    quenswer.correct = "correct" if correct else "incorrect"
+    quenswer.correct = "true" if correct else "false"
     quenswer.save()
     return (jsonify(quenswer), 200)
 
@@ -1438,6 +1449,52 @@ def putMarking():
 @app.route("/analytics/mostOftenWrong", methods=["GET"])
 def analyticsMostOftenWrongGET():
     pass
+
+
+@app.route("/analytics/user/questions", methods=["GET"])
+def analyticsUserCorrectQuestionsGet():
+    requestData = request.get_json()
+    userId = requestData["userId"]
+    opcorect = []
+    opincorect = []
+    op = {}
+    allqs = []
+    for quenswer in Quenswers.objects(userId=userId):
+        allqs.append(str(quenswer.pk))
+        if quenswer.correct == "true":
+            opcorect.append(str(quenswer.pk))
+        elif quenswer.correct == "false":
+            opincorect.append(str(quenswer.pk))
+    op['userId'] = userId
+    op["correctId"] = opcorect
+    op["correctLen"] = len(opcorect)
+    op["incorrectId"] = opincorect
+    op["incorrectLen"] = len(opincorect)
+    op["allId"] = allqs
+    op["allLen"] = len(allqs)
+    return(jsonify(op))
+
+
+@app.route("/analytics/categories/questions", methods=["GET"])
+def analyticsCategoriesQuestionsGet():
+    requestData = request.get_json()
+    categId = requestData["categId"]
+    categObj = Categories.objects(id=categId).first()
+    print(categObj.name)
+    correct = {}
+    incorrect = {}
+    for question in Question.objects(category=categObj.name):
+        correct[str(question.pk)] = 0
+        incorrect[str(question.pk)] = 0
+        for quenswer in Quenswers.objects(questionId=str(question.pk)):
+            if quenswer.correct == "true":
+                correct[str(question.pk)] += 1
+            elif quenswer.correct == "false":
+                incorrect[str(question.pk)] += 1
+    return(jsonify({
+        "correct": correct,
+        "incorrect": incorrect
+    }))
 
 
 ############################################
@@ -1506,7 +1563,8 @@ def samCustomLogin():
         if data["email"]:
             email = data["email"]
             passwordHash = data["passwordHash"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             login_user(userObj)
             print("login")
             print(session.keys())
@@ -1546,6 +1604,7 @@ def markTrueFalse(quenswerObj, questionObj):
     quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
     quenswerObj.save()
 
+
 def markMultiple(quenswerObj, questionObj):
     if len(questionObj.answer) >= 2:
         for userAnswer in quenswerObj.answer:
@@ -1559,11 +1618,14 @@ def markMultiple(quenswerObj, questionObj):
         quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
         quenswerObj.save()
 
+
 def markNumber(quenswerObj, questionObj):
     quenswerObj.markedBy = "System"
     quenswerObj.markedDateTime = datetime.datetime.now()
-    quenswerObj.correct = "true" if float(quenswerObj.answer[0]) == float(questionObj.answer[0]) else "false"
+    quenswerObj.correct = "true" if float(quenswerObj.answer[0]) == float(
+        questionObj.answer[0]) else "false"
     quenswerObj.save()
+
 
 def autoMarking(quiz):
     print("trying to self mark")
@@ -1596,4 +1658,4 @@ if __name__ == "__main__":
 # LIST OF TODOs #
 #################
 
-#TODO if a question is marked as first and last it will cause the server to not emit any questions
+# TODO if a question is marked as first and last it will cause the server to not emit any questions
