@@ -6,6 +6,8 @@ import string
 import math
 import time
 from flask_mongoengine import *
+
+
 from flask_socketio import *
 from flask import *
 import datetime
@@ -493,8 +495,10 @@ def createRoom(data):
     requestUserId = data["userID"]
     quizStarted = "False"
     questionCompleted = []
+    '''
     for question in questions:
         questionCompleted.append("")
+    '''
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -565,14 +569,13 @@ def on_leave(data):
 
 
 # submit quiz answer
-
-
 @socketio.event
 def submitAnswer(data):
-    print("\033[93m== SUBMIT ANSWER ENDPOINT ==\033[0m")
+    print("\033[93m== SUBMIT ANSWER EVENT ==\033[0m")
     print(f"Received data:")
     for k,v in data.items():
         print(f"{k} -> {v}")
+
     curUserId = data["userID"]["userID"]
     roomId = data["room"]["roomCode"]
     quizEnv = ActiveRooms.objects(roomId=roomId).first()
@@ -587,37 +590,25 @@ def submitAnswer(data):
         markedBy="None",
         correct="unMarked",
     )
+    print("Quiz environment object:")
+    print(quizEnv)
+
     thisAnswer.save()
-    # checks to see if this answer was the last one for the quizEnv
-    thisCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
-    thisWeirdModulo = thisCount % (len(quizEnv.connectedUserId) - 1)
-    print(f"count is {thisCount}")
-    print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
-    print(f"Whatever's sams weird modulo function is: {thisWeirdModulo}")
+    currentQuestion = quizEnv.currentQuestion
+    # Get list of all quenswers part of this quiz and with 
+    newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(questionId=currentQuestion).count()
+    print(f"New count based on extended shite: {newCount}")
 
-    if (
-        thisCount
-        % (len(quizEnv.connectedUserId) - 1)
-        == 0
-    ):
-        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
-        if quizEnvUpToDate == None:
-            pass
-        else:
-            currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
-                quizEnvUpToDate.currentQuestion
-            )
-            if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
-                pass
-            else:
-                quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
-                quizEnvUpToDate.save()
-                print("\033[92m== EMITTING TIMEOUT ==\033[0m")
-                emit("questionTimeout", to=roomId)
-    else:
-        print("still more users to answer")
-
-    return "yis"
+    if newCount >= (len(quizEnv.connectedUserId) -1 ):
+        print("We have received the same or more responses than questions")
+        print("\033[92m== EMITTING TIMEOUT - RECEIVED ALL ANSWERS ==\033[0m")
+        latestEnv = ActiveRooms.objects(roomId=roomId).first()
+        latestEnv.questionCompleted.append(currentQuestion)
+        latestEnv.save()
+        emit("questionTimeout", to=roomId)
+        return
+        # Prematurely end quiz
+    print("Awaiting more responses...")
 
 
 # Send Question to quizspace
@@ -708,7 +699,7 @@ def sendQuestion(data):
         for k,v in data.items():
             print(f"{k} -> {v}")
 
-        send("question was sent")
+        # send("question was sent")
         op = {}
         roomId = data["room"]
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
@@ -717,12 +708,11 @@ def sendQuestion(data):
             print("This question was the last question")
             raise LastQuestion(quizEnv.roomId)
 
-        print(f"questions list length is {len(quizEnv.questions)}")
-        print(quizEnv.questions)
-
+        # print(f"questions list length is {len(quizEnv.questions)}")
+        # print(quizEnv.questions)
         questionLs = quizEnv.questions
-        print(quizEnv.questions)
-        print(questionLs)
+        # print(quizEnv.questions)
+        # print(questionLs)
 
         if quizEnv.firstQuestion == "True":
             curQuestion = quizEnv.currentQuestion
@@ -731,8 +721,6 @@ def sendQuestion(data):
             curQuestion = questionLs[0]
             quizEnv.currentQuestion = curQuestion
             quizEnv.questions.remove(curQuestion)
-
-        thisRoom = data["room"]
 
         if len(quizEnv.questions) == 0:
             print("lastQuestion = True")
@@ -756,31 +744,40 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-        # strCurrentTime = datetime.datetime.now()
-        # op["currentTime"] = str(strCurrentTime)
-        # strFinishQuestion = datetime.datetime.now(
-        # ) + datetime.timedelta(seconds=quizEnv.timeLimit)
-        # op["finishQuestion"] = str(strFinishQuestion)
         tempUnixTimeInMS = time.time_ns() / 1000000
         op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
-        print(f'Value of "time limit": {quizEnv.timeLimit}')
-        print("type of finishQuestion")
-        print(type(op["finishQuestion"]))
-        print("finishQuestion")
-        print(op["finishQuestion"])
+
+        # print(type(op["finishQuestion"]))
+        # print("finishQuestion")
+        # print(op["finishQuestion"])
+        # print("type of finishQuestion")
+        # print(f'Value of "time limit": {quizEnv.timeLimit}')
     except LastQuestion as lqe:
         print(f"caught that fact it was the last question for room {lqe}")
-    except Exception:
+    except Exception as e:
         print("there was an error")
+        print(e)
     else:
-        print(type(op))
-        print(op)
-        emit("receiveQuestion", op, to=thisRoom)
-        print(f"\033[93m Sleeping for {quizEnv.timeLimit} seconds '\033[0m'")
+        # print(type(op))
+        # print(op)
+        emit("receiveQuestion", op, to=roomId)
+
+        print(f"\033[93mSleeping for {quizEnv.timeLimit} seconds.\033[0m")
+
         socketio.sleep(quizEnv.timeLimit)
+        print("Querying timer status...")
         quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+
         if quizEnvUpToDate == None:
-            pass
+            return
+
+        if not (curQuestion in quizEnvUpToDate.questionCompleted):
+            print("\033[92m== EMITTING TIMEOUT - TIMER EXPIRED ==\033[0m")
+            emit("questionTimeout", to=roomId)
+            return
+        
+
+        '''
         else:
             currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
                 quizEnvUpToDate.currentQuestion
@@ -791,8 +788,9 @@ def sendQuestion(data):
                 quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
                 quizEnvUpToDate.save()
                 print(f"\033[93m Question timed out, emitting event'\033[0m'")
-                emit("questionTimeout", to=thisRoom)
+                emit("questionTimeout", to=roomId)
         #   print(op)
+        '''
 
 
 @socketio.event
