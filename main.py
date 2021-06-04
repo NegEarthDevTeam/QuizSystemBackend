@@ -590,21 +590,19 @@ def submitAnswer(data):
         markedBy="None",
         correct="unMarked",
     )
-    print("Quiz environment object:")
-    print(quizEnv)
-
     thisAnswer.save()
+
     currentQuestion = quizEnv.currentQuestion
-    # Get list of all quenswers part of this quiz and with 
     newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(questionId=currentQuestion).count()
-    print(f"New count based on extended shite: {newCount}")
 
     if newCount >= (len(quizEnv.connectedUserId) -1 ):
-        print("We have received the same or more responses than questions")
+        print("We have received the same or more responses than connected users")
         print("\033[92m== EMITTING TIMEOUT - RECEIVED ALL ANSWERS ==\033[0m")
-        latestEnv = ActiveRooms.objects(roomId=roomId).first()
-        latestEnv.questionCompleted.append(currentQuestion)
-        latestEnv.save()
+
+        newEnv = ActiveRooms.objects(roomId=roomId).first()
+        newEnv.questionCompleted.append(currentQuestion)
+        newEnv.save()
+
         emit("questionTimeout", to=roomId)
         return
         # Prematurely end quiz
@@ -766,12 +764,14 @@ def sendQuestion(data):
 
         socketio.sleep(quizEnv.timeLimit)
         print("Querying timer status...")
-        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
+        newEnv = ActiveRooms.objects(roomId=roomId).first()
 
-        if quizEnvUpToDate == None:
+        if newEnv == None:
             return
 
-        if not (curQuestion in quizEnvUpToDate.questionCompleted):
+        if not (curQuestion in newEnv.questionCompleted):
+            newEnv.questionCompleted.append(curQuestion)
+            newEnv.save()
             print("\033[92m== EMITTING TIMEOUT - TIMER EXPIRED ==\033[0m")
             emit("questionTimeout", to=roomId)
             return
