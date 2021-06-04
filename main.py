@@ -6,6 +6,8 @@ import string
 import math
 import time
 from flask_mongoengine import *
+
+
 from flask_socketio import *
 from flask import *
 import datetime
@@ -493,8 +495,10 @@ def createRoom(data):
     requestUserId = data["userID"]
     quizStarted = "False"
     questionCompleted = []
+    '''
     for question in questions:
         questionCompleted.append("")
+    '''
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -565,18 +569,15 @@ def on_leave(data):
 
 
 # submit quiz answer
-
-
 @socketio.event
 def submitAnswer(data):
-    print("data")
-    print(data)
+    print("\033[93m== SUBMIT ANSWER EVENT ==\033[0m")
+    print(f"Received data:")
+    for k,v in data.items():
+        print(f"{k} -> {v}")
+
     curUserId = data["userID"]["userID"]
-    print("submitAnswer")
     roomId = data["room"]["roomCode"]
-    print(f"roomID: {roomId}")
-    print(data)
-    print(curUserId)
     quizEnv = ActiveRooms.objects(roomId=roomId).first()
 
     thisAnswer = Quenswers(
@@ -586,36 +587,25 @@ def submitAnswer(data):
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
-        markedBy="None",
         correct="unMarked",
     )
     thisAnswer.save()
-    # checks to see if this answer was the last one for the quizEnv
-    print(f".count is{Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()}")
-    print(f"len -1 is {len(quizEnv.connectedUserId) - 1}")
 
-    if (
-        Quenswers.objects(quizEnvId=str(quizEnv.pk)).count()
-        % (len(quizEnv.connectedUserId) - 1)
-        == 0
-    ):
-        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
-        if quizEnvUpToDate == None:
-            pass
-        else:
-            currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
-                quizEnvUpToDate.currentQuestion
-            )
-            if quizEnvUpToDate.questionCompleted[currQuestionListIndex] == "true":
-                pass
-            else:
-                quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
-                quizEnvUpToDate.save()
-                emit("questionTimeout", to=roomId)
-    else:
-        print("still more users to answer")
+    currentQuestion = quizEnv.currentQuestion
+    newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(questionId=currentQuestion).count()
 
-    return "yis"
+    if newCount >= (len(quizEnv.connectedUserId) -1 ):
+        print("We have received the same or more responses than connected users")
+        print("\033[92m== EMITTING TIMEOUT - RECEIVED ALL ANSWERS ==\033[0m")
+
+        newEnv = ActiveRooms.objects(roomId=roomId).first()
+        newEnv.questionCompleted.append(currentQuestion)
+        newEnv.save()
+
+        emit("questionTimeout", to=roomId)
+        return
+        # Prematurely end quiz
+    print("Awaiting more responses...")
 
 
 # Send Question to quizspace
@@ -624,10 +614,16 @@ def submitAnswer(data):
 
 @socketio.event
 def startQuiz(data):
+    print("\033[93m== START QUIZ EVENT ==\033[0m")
+    print(f"Received data:")
+    for k,v in data.items():
+        print(f"{k} -> {v}")
     curUserId = data["userID"]
+    '''
     print("startQuiz")
     print(data.keys())
     print(data.values())
+    '''
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
     quizEnv.save()
@@ -663,7 +659,6 @@ def startQuiz(data):
             quizEnv.lastQuestion = "False"
 
         quizEnv.save()
-
         questionObj = Question.objects(id=curQuestion).first()
 
         if questionObj.questionType == "multiple":
@@ -697,28 +692,31 @@ def startQuiz(data):
         send("There were no questions in this quiz")
     else:
         print(op)
+        return op
 
 
 @socketio.event
 def sendQuestion(data):
     try:
-        print("sendQuestionEvent")
-        send("question was sent")
+        print("\033[93m== SEND QUESTION EVENT ==\033[0m")
+        print("Data recieved:")
+        for k,v in data.items():
+            print(f"{k} -> {v}")
+
+        # send("question was sent")
         op = {}
         roomId = data["room"]
-        print(roomId)
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
-        print(quizEnv.roomId)
+        print(f"Environment roomID: {quizEnv.roomId}")
         if quizEnv.lastQuestion == "True":
-            print("was last question")
+            print("This question was the last question")
             raise LastQuestion(quizEnv.roomId)
 
-        print(f"questions list length is {len(quizEnv.questions)}")
-        print(quizEnv.questions)
-
+        # print(f"questions list length is {len(quizEnv.questions)}")
+        # print(quizEnv.questions)
         questionLs = quizEnv.questions
-        print(quizEnv.questions)
-        print(questionLs)
+        # print(quizEnv.questions)
+        # print(questionLs)
 
         if quizEnv.firstQuestion == "True":
             curQuestion = quizEnv.currentQuestion
@@ -727,8 +725,6 @@ def sendQuestion(data):
             curQuestion = questionLs[0]
             quizEnv.currentQuestion = curQuestion
             quizEnv.questions.remove(curQuestion)
-
-        thisRoom = data["room"]
 
         if len(quizEnv.questions) == 0:
             print("lastQuestion = True")
@@ -752,31 +748,43 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
-        # strCurrentTime = datetime.datetime.now()
-        # op["currentTime"] = str(strCurrentTime)
-        # strFinishQuestion = datetime.datetime.now(
-        # ) + datetime.timedelta(seconds=quizEnv.timeLimit)
-        # op["finishQuestion"] = str(strFinishQuestion)
+        op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
         op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
-        print(f'Value of "time limit": {quizEnv.timeLimit}')
-        print("type of finishQuestion")
-        print(type(op["finishQuestion"]))
-        print("finishQuestion")
-        print(op["finishQuestion"])
+
+        # print(type(op["finishQuestion"]))
+        # print("finishQuestion")
+        # print(op["finishQuestion"])
+        # print("type of finishQuestion")
+        # print(f'Value of "time limit": {quizEnv.timeLimit}')
     except LastQuestion as lqe:
         print(f"caught that fact it was the last question for room {lqe}")
-    except Exception:
+    except Exception as e:
         print("there was an error")
+        print(e)
     else:
-        print(type(op))
-        print(op)
-        emit("receiveQuestion", op, to=thisRoom)
-        print(f"server sleeping for {quizEnv.timeLimit} seconds")
+        # print(type(op))
+        # print(op)
+        emit("receiveQuestion", op, to=roomId)
+
+        print(f"\033[93mSleeping for {quizEnv.timeLimit} seconds.\033[0m")
+
         socketio.sleep(quizEnv.timeLimit)
-        quizEnvUpToDate = ActiveRooms.objects(roomId=roomId).first()
-        if quizEnvUpToDate == None:
-            pass
+        print("Querying timer status...")
+        newEnv = ActiveRooms.objects(roomId=roomId).first()
+
+        if newEnv == None:
+            return
+
+        if not (curQuestion in newEnv.questionCompleted):
+            newEnv.questionCompleted.append(curQuestion)
+            newEnv.save()
+            print("\033[92m== EMITTING TIMEOUT - TIMER EXPIRED ==\033[0m")
+            emit("questionTimeout", to=roomId)
+            return
+        
+
+        '''
         else:
             currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
                 quizEnvUpToDate.currentQuestion
@@ -786,9 +794,10 @@ def sendQuestion(data):
             else:
                 quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
                 quizEnvUpToDate.save()
-                print("server woke, emiting timeout")
-                emit("questionTimeout", to=thisRoom)
+                print(f"\033[93m Question timed out, emitting event'\033[0m'")
+                emit("questionTimeout", to=roomId)
         #   print(op)
+        '''
 
 
 @socketio.event
@@ -1352,8 +1361,7 @@ def markingGet():
 def batchMark():
     requestData = request.get_json()
     # Check necessary data
-    expectedData = ["userID", "toMark"]
-    if not logic.assertExists(expectedData, requestData):
+    if not logic.assertExists(["userID", "toMark"], requestData):
         return ("Insufficent data", 400)
 
     if len(requestData["toMark"]) < 1:
@@ -1371,7 +1379,7 @@ def batchMark():
             returnValue.append(thisQuenswer)
         return jsonify(returnValue), 200
     except Exception as e:
-        print(f"Exception raised at endpoint {request.url_rule}:")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
 
 
@@ -1380,8 +1388,7 @@ def batchMark():
 def markQuenswer(qid):
     requestData = request.get_json()
     # check necessary data
-    expectedData = ["correct", "userID"]
-    if not logic.assertExists(expectedData, requestData):
+    if not logic.assertExists(["correct", "userID"], requestData):
         return ("Insufficent data", 400)
 
     # Send shite
@@ -1395,7 +1402,7 @@ def markQuenswer(qid):
         thisQuenswer.save()
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print("Encountered exception on route /api/quenswer/<qid>/mark")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1409,7 +1416,7 @@ def getQuenswer(qid):
             return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print("Encountered exception on route /api/quenswer/<qid>")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1534,56 +1541,29 @@ def assignQuenswersToQuiz(quiz):
 
 
 def markTrueFalse(quenswerObj, questionObj):
-    if quenswerObj.answer[0] == questionObj.answer[0]:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "true"
-        quenswerObj.save()
-    else:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "false"
-        quenswerObj.save()
-
+    quenswerObj.markedBy = "System"
+    quenswerObj.markedDateTime = datetime.datetime.now()
+    quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+    quenswerObj.save()
 
 def markMultiple(quenswerObj, questionObj):
     if len(questionObj.answer) >= 2:
         for userAnswer in quenswerObj.answer:
-            if userAnswer in questionObj.answer:
-                quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTime = datetime.datetime.now()
-                quenswerObj.correct = "true"
-                quenswerObj.save()
-            else:
-                quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTime = datetime.datetime.now()
-                quenswerObj.correct = "false"
-                quenswerObj.save()
+            quenswerObj.markedBy = "System"
+            quenswerObj.markedDateTime = datetime.datetime.now()
+            quenswerObj.correct = "true" if userAnswer in questionObj.answer else "false"
+            quenswerObj.save()
     else:
-        if quenswerObj.answer[0] == questionObj.answer[0]:
-            quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTime = datetime.datetime.now()
-            quenswerObj.correct = "true"
-            quenswerObj.save()
-        else:
-            quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTime = datetime.datetime.now()
-            quenswerObj.correct = "false"
-            quenswerObj.save()
-
+        quenswerObj.markedBy = "System"
+        quenswerObj.markedDateTime = datetime.datetime.now()
+        quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+        quenswerObj.save()
 
 def markNumber(quenswerObj, questionObj):
-    if quenswerObj.answer[0] == questionObj.answer[0]:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "true"
-        quenswerObj.save()
-    else:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "false"
-        quenswerObj.save()
-
+    quenswerObj.markedBy = "System"
+    quenswerObj.markedDateTime = datetime.datetime.now()
+    quenswerObj.correct = "true" if float(quenswerObj.answer[0]) == float(questionObj.answer[0]) else "false"
+    quenswerObj.save()
 
 def autoMarking(quiz):
     print("trying to self mark")
