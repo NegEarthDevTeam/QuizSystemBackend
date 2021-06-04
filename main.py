@@ -614,10 +614,16 @@ def submitAnswer(data):
 
 @socketio.event
 def startQuiz(data):
+    print("\033[93m== START QUIZ EVENT ==\033[0m")
+    print(f"Received data:")
+    for k,v in data.items():
+        print(f"{k} -> {v}")
     curUserId = data["userID"]
+    '''
     print("startQuiz")
     print(data.keys())
     print(data.values())
+    '''
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
     quizEnv.save()
@@ -686,6 +692,7 @@ def startQuiz(data):
         send("There were no questions in this quiz")
     else:
         print(op)
+        return op
 
 
 @socketio.event
@@ -741,6 +748,7 @@ def sendQuestion(data):
         op["questionType"] = questionObj.questionType
         op["title"] = questionObj.title
         op["bodyMD"] = questionObj.bodyMD
+        op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
         op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
@@ -1353,8 +1361,7 @@ def markingGet():
 def batchMark():
     requestData = request.get_json()
     # Check necessary data
-    expectedData = ["userID", "toMark"]
-    if not logic.assertExists(expectedData, requestData):
+    if not logic.assertExists(["userID", "toMark"], requestData):
         return ("Insufficent data", 400)
 
     if len(requestData["toMark"]) < 1:
@@ -1381,8 +1388,7 @@ def batchMark():
 def markQuenswer(qid):
     requestData = request.get_json()
     # check necessary data
-    expectedData = ["correct", "userID"]
-    if not logic.assertExists(expectedData, requestData):
+    if not logic.assertExists(["correct", "userID"], requestData):
         return ("Insufficent data", 400)
 
     # Send shite
