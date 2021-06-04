@@ -587,7 +587,6 @@ def submitAnswer(data):
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
-        markedBy="None",
         correct="unMarked",
     )
     thisAnswer.save()
@@ -1373,7 +1372,7 @@ def batchMark():
             returnValue.append(thisQuenswer)
         return jsonify(returnValue), 200
     except Exception as e:
-        print(f"Exception raised at endpoint {request.url_rule}:")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
 
 
@@ -1397,7 +1396,7 @@ def markQuenswer(qid):
         thisQuenswer.save()
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print("Encountered exception on route /api/quenswer/<qid>/mark")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1411,7 +1410,7 @@ def getQuenswer(qid):
             return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print("Encountered exception on route /api/quenswer/<qid>")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1536,56 +1535,29 @@ def assignQuenswersToQuiz(quiz):
 
 
 def markTrueFalse(quenswerObj, questionObj):
-    if quenswerObj.answer[0] == questionObj.answer[0]:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "true"
-        quenswerObj.save()
-    else:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "false"
-        quenswerObj.save()
-
+    quenswerObj.markedBy = "System"
+    quenswerObj.markedDateTime = datetime.datetime.now()
+    quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+    quenswerObj.save()
 
 def markMultiple(quenswerObj, questionObj):
     if len(questionObj.answer) >= 2:
         for userAnswer in quenswerObj.answer:
-            if userAnswer in questionObj.answer:
-                quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTime = datetime.datetime.now()
-                quenswerObj.correct = "true"
-                quenswerObj.save()
-            else:
-                quenswerObj.markedBy = "system"
-                quenswerObj.markedDateTime = datetime.datetime.now()
-                quenswerObj.correct = "false"
-                quenswerObj.save()
+            quenswerObj.markedBy = "System"
+            quenswerObj.markedDateTime = datetime.datetime.now()
+            quenswerObj.correct = "true" if userAnswer in questionObj.answer else "false"
+            quenswerObj.save()
     else:
-        if quenswerObj.answer[0] == questionObj.answer[0]:
-            quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTime = datetime.datetime.now()
-            quenswerObj.correct = "true"
-            quenswerObj.save()
-        else:
-            quenswerObj.markedBy = "system"
-            quenswerObj.markedDateTime = datetime.datetime.now()
-            quenswerObj.correct = "false"
-            quenswerObj.save()
-
+        quenswerObj.markedBy = "System"
+        quenswerObj.markedDateTime = datetime.datetime.now()
+        quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+        quenswerObj.save()
 
 def markNumber(quenswerObj, questionObj):
-    if quenswerObj.answer[0] == questionObj.answer[0]:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "true"
-        quenswerObj.save()
-    else:
-        quenswerObj.markedBy = "system"
-        quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "false"
-        quenswerObj.save()
-
+    quenswerObj.markedBy = "System"
+    quenswerObj.markedDateTime = datetime.datetime.now()
+    quenswerObj.correct = "true" if float(quenswerObj.answer[0]) == float(questionObj.answer[0]) else "false"
+    quenswerObj.save()
 
 def autoMarking(quiz):
     print("trying to self mark")
