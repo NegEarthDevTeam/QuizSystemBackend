@@ -687,7 +687,7 @@ def startQuiz(data):
         print("finishQuestion")
         print(op["finishQuestion"])
 
-        emit("startedQuiz", (len(questionLs)), to=roomId)
+        emit("startedQuiz", (len(questionLs)+1), to=roomId)
 
         print("the quizEnv firstQuestion should have been set by now")
         print(quizEnv.currentQuestion)
