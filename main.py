@@ -8,8 +8,7 @@ import math
 import time
 import analytics
 from flask_mongoengine import *
-
-
+import hashlib
 from flask_socketio import *
 from flask import *
 import datetime
@@ -24,6 +23,18 @@ from flask_login import (
 from flask_session import Session
 
 global db
+global SECRET_KEY
+
+
+def prRed(skk): print("\033[91m {}\033[00m" .format(skk))
+def prGreen(skk): print("\033[92m {}\033[00m" .format(skk))
+def prYellow(skk): print("\033[93m {}\033[00m" .format(skk))
+def prLightPurple(skk): print("\033[94m {}\033[00m" .format(skk))
+def prPurple(skk): print("\033[95m {}\033[00m" .format(skk))
+def prCyan(skk): print("\033[96m {}\033[00m" .format(skk))
+def prLightGray(skk): print("\033[97m {}\033[00m" .format(skk))
+def prBlack(skk): print("\033[98m {}\033[00m" .format(skk))
+
 
 app = Flask(__name__)
 
@@ -37,6 +48,8 @@ db = MongoEngine(app)
 
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SECRET_KEY"] = "quizSystemSecretKey"
+SECRET_KEY = "%^&quizSystem*()SecretKey!£$"
+
 # app.config['SESSION_PERMANENT'] = False
 
 login_manager = LoginManager(app)
@@ -390,20 +403,21 @@ login_manager.session_protection = "strong"
 def login():
     request_data = request.get_json()
     data = request_data
-    print("login")
-    print(session.keys())
-    print(session.values())
-    print(session.sid)
+
     if "session" in data:
         session["value"] = data["session"]
     elif "email" in data:
         if data["email"]:
             email = request_data["email"]
             if "passwordHash" in request_data:
-                passwordHash = request_data["passwordHash"]
+                password = request_data["passwordHash"]
+                passwordWiSalt = password + SECRET_KEY
+                passwordHash = hashlib.md5(passwordWiSalt.encode())
+                passwordHash = passwordHash.hexdigest()
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -426,10 +440,7 @@ def login():
 def socketLogin(data):
     # request_data = request.get_json()
     # data = request_data
-    print("socketLogin")
-    print(session.keys())
-    print(session.values())
-    print(session.sid)
+
     if "session" in data:
         session["value"] = data["session"]
     elif "email" in data:
@@ -439,7 +450,8 @@ def socketLogin(data):
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -468,7 +480,7 @@ def user_info():
 @app.route("/api/isUserLoggedIn", methods=["GET"])
 def apiIsUserLoggedIn():
     if current_user.is_authenticated:
-        print(f"User ID is {current_user.get_id()}")
+
         return "True"
     elif not current_user.is_authenticated:
         return "False"
@@ -481,17 +493,13 @@ def apiIsUserLoggedIn():
 # @app.route('/socketIO/API/createRoom2', methods=["POST"])
 @socketio.on("createRoom")
 def createRoom(data):
-    # print(session.get('currentUser', 'user not found'))
+    #
     # if current_user.is_authenticated:
     quizId = "".join(random.choice(string.ascii_uppercase) for i in range(6))
-    print("createRoom")
-    print(data)
-    print(session.keys())
-    print(session.values())
-    print(session.sid)
+
     questions = data["questionIDs"]
     if len(questions) == 0:
-        print("questions len was 0")
+
         return ("error", 400)
     timeLimit = data["timeLimit"]
     requestUserId = data["userID"]
@@ -517,7 +525,7 @@ def createRoom(data):
         hostId=requestUserId,
     )
     activeRooms.save()
-    print(f"room created with quiz ID: {quizId}")
+
     # emit('id', f'ID {quizId}', namespace='/', )
     join_room(quizId)
     return quizId
@@ -533,15 +541,12 @@ def on_join(data):
     userPk = data["userID"]
 
     roomObj = ActiveRooms.objects(roomId=room).first()
-    print("the join event was run")
-    print(data.keys())
-    print(data.values())
+
     emit("joinRoom", roomObj.timeLimit)
 
     roomObj.connectedUserId.append(userPk)
     roomObj.allConnectedUsers.append(userPk)
     roomObj.save()
-    print("emitting onRoomUpdated")
 
     thisNewUser = UserType.objects(id=userPk).first()
     newUserName = thisNewUser.firstName + " " + thisNewUser.lastName
@@ -551,7 +556,7 @@ def on_join(data):
         + UserType.objects(id=id).first().lastName
         for id in roomObj.connectedUserId
     ]
-    print(tempArray)
+
     emit("onRoomUpdated", newUserName, to=room)
     return (tempArray, roomObj.timeLimit)
 
@@ -561,22 +566,17 @@ def on_join(data):
 
 @socketio.on("leave")
 def on_leave(data):
-    print("leave")
+
     username = data["username"]
     room = data["room"]
     leave_room(room)
 
-    print("the ")
     send(username + " has left the quizspace.", to=room)
 
 
 # submit quiz answer
 @socketio.event
 def submitAnswer(data):
-    print("\033[93m== SUBMIT ANSWER EVENT ==\033[0m")
-    print(f"Received data:")
-    for k, v in data.items():
-        print(f"{k} -> {v}")
 
     curUserId = data["userID"]["userID"]
     roomId = data["room"]["roomCode"]
@@ -585,7 +585,8 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(
+            data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -601,17 +602,14 @@ def submitAnswer(data):
     )
 
     if newCount >= (len(quizEnv.connectedUserId) - 1):
-        print("We have received the same or more responses than connected users")
-        print("\033[92m== EMITTING TIMEOUT - RECEIVED ALL ANSWERS ==\033[0m")
 
         newEnv = ActiveRooms.objects(roomId=roomId).first()
         newEnv.questionCompleted.append(currentQuestion)
         newEnv.save()
 
         emit("questionTimeout", to=roomId)
-        return
+        return "yolo"
         # Prematurely end quiz
-    print("Awaiting more responses...")
 
 
 # Send Question to quizspace
@@ -620,15 +618,12 @@ def submitAnswer(data):
 
 @socketio.event
 def startQuiz(data):
-    print("\033[93m== START QUIZ EVENT ==\033[0m")
-    print(f"Received data:")
-    for k, v in data.items():
-        print(f"{k} -> {v}")
+
     curUserId = data["userID"]
     """
-    print("startQuiz")
-    print(data.keys())
-    print(data.values())
+    
+    
+    
     """
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
@@ -637,12 +632,10 @@ def startQuiz(data):
     try:
         op = {}
         roomId = data["room"]
-        print(f"var room Id {roomId}")
+
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
         questionLs = quizEnv.questions
-        print(f"quizEnv roomId {quizEnv.roomId}")
-        print(quizEnv.questions)
-        print(f"request.sid is {request.sid}")
+
         curQuestion = questionLs[0]
         quizEnv.currentQuestion = curQuestion
         quizEnv.questions.remove(curQuestion)
@@ -650,17 +643,15 @@ def startQuiz(data):
         quizEnv.save()
 
         if quizEnv.lastQuestion == "True":
-            print("was last question")
+
             raise LastQuestion(f"LastQuestion for room {quizEnv.roomId}")
 
-        print(f"questions list length is {len(quizEnv.questions)}")
-        print(quizEnv.questions)
         if len(quizEnv.questions) == 0:
-            print("lastQuestion = True")
+
             op["lastQuestion"] = "True"
             quizEnv.lastQuestion = "True"
         else:
-            print("lastQuestion = False")
+
             op["lastQuestion"] = "False"
             quizEnv.lastQuestion = "False"
 
@@ -683,46 +674,35 @@ def startQuiz(data):
             seconds=quizEnv.timeLimit
         )
         op["finishQuestion"] = str(strFinishQuestion)
-        print("type of finishQuestion")
-        print(type(op["finishQuestion"]))
-        print("finishQuestion")
-        print(op["finishQuestion"])
 
         emit("startedQuiz", (len(questionLs) + 1), to=roomId)
 
-        print("the quizEnv firstQuestion should have been set by now")
-        print(quizEnv.currentQuestion)
     except Exception as err:
-        print("there was an error")
-        print(err)
+
         send("There were no questions in this quiz")
     else:
-        print(op)
+
         return op
 
 
 @socketio.event
 def sendQuestion(data):
     try:
-        print("\033[93m== SEND QUESTION EVENT ==\033[0m")
-        print("Data recieved:")
-        for k, v in data.items():
-            print(f"{k} -> {v}")
 
         # send("question was sent")
         op = {}
         roomId = data["room"]
         quizEnv = ActiveRooms.objects(roomId=roomId).first()
-        print(f"Environment roomID: {quizEnv.roomId}")
+
         if quizEnv.lastQuestion == "True":
-            print("This question was the last question")
+
             raise LastQuestion(quizEnv.roomId)
 
-        # print(f"questions list length is {len(quizEnv.questions)}")
-        # print(quizEnv.questions)
+        #
+        #
         questionLs = quizEnv.questions
-        # print(quizEnv.questions)
-        # print(questionLs)
+        #
+        #
 
         if quizEnv.firstQuestion == "True":
             curQuestion = quizEnv.currentQuestion
@@ -733,11 +713,11 @@ def sendQuestion(data):
             quizEnv.questions.remove(curQuestion)
 
         if len(quizEnv.questions) == 0:
-            print("lastQuestion = True")
+
             op["lastQuestion"] = "True"
             quizEnv.lastQuestion = "True"
         else:
-            print("lastQuestion = False")
+
             op["lastQuestion"] = "False"
             quizEnv.lastQuestion = "False"
 
@@ -756,27 +736,26 @@ def sendQuestion(data):
         op["bodyMD"] = questionObj.bodyMD
         op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
-        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        op["finishQuestion"] = math.floor(
+            tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
-        # print(type(op["finishQuestion"]))
-        # print("finishQuestion")
-        # print(op["finishQuestion"])
-        # print("type of finishQuestion")
-        # print(f'Value of "time limit": {quizEnv.timeLimit}')
+        #
+        #
+        #
+        #
+        #
     except LastQuestion as lqe:
-        print(f"caught that fact it was the last question for room {lqe}")
+        prRed(lqe)
     except Exception as e:
-        print("there was an error")
-        print(e)
+        prRed(e)
+
     else:
-        # print(type(op))
-        # print(op)
+        #
+        #
         emit("receiveQuestion", op, to=roomId)
 
-        print(f"\033[93mSleeping for {quizEnv.timeLimit} seconds.\033[0m")
-
         socketio.sleep(quizEnv.timeLimit)
-        print("Querying timer status...")
+
         newEnv = ActiveRooms.objects(roomId=roomId).first()
 
         if newEnv == None:
@@ -785,7 +764,7 @@ def sendQuestion(data):
         if not (curQuestion in newEnv.questionCompleted):
             newEnv.questionCompleted.append(curQuestion)
             newEnv.save()
-            print("\033[92m== EMITTING TIMEOUT - TIMER EXPIRED ==\033[0m")
+
             emit("questionTimeout", to=roomId)
             return
 
@@ -799,15 +778,15 @@ def sendQuestion(data):
             else:
                 quizEnvUpToDate.questionCompleted[currQuestionListIndex] = "true"
                 quizEnvUpToDate.save()
-                print(f"\033[93m Question timed out, emitting event'\033[0m'")
+                
                 emit("questionTimeout", to=roomId)
-        #   print(op)
+        #   
         """
 
 
 @socketio.event
 def finishQuiz(data):
-    print("finish quiz")
+
     room = data["room"]
     # close_room(room)
     curUserId = data["userID"]
@@ -843,7 +822,7 @@ def addUserToRoom(room, userPK):
     roomObj.allConnectedUsers.append(userPK)
     roomObj.save()
     onRoomUpdated(room)
-    print("emitting onRoomUpdated")
+
     # emit("onRoomUpdated", connectedusers, to=roomId)
 
 
@@ -855,7 +834,7 @@ def removeUserFromRoom(roomId, userId):
     except ValueError:
         return (jsonify("User wasnt in the room"), 404)
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         pass
@@ -869,7 +848,7 @@ def onRoomUpdated(roomId):
         userObj = UserType.objects(id=user).first()
         op.append(userObj.firstName)
     room.save()
-    print("emitting onRoomUpdated")
+
     emit("onRoomUpdated", op, to=roomId)
 
 
@@ -887,19 +866,20 @@ def getUsers():
     reqID, reqType = request.args.get("id"), request.args.get("type")
 
     def getUserById(id):
-        print("getUserById")
+
         user = UserType.objects(id=id).exclude("passwordHash").first()
         return user
 
     def getUserByType(type):
-        print("getUserByType")
+
         op = []
         for user in UserType.objects(hostOrTest=type):
-            op.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
+            op.append(UserType.objects(id=str(user.pk)
+                                       ).exclude("passwordHash").first())
         return op
 
     def getAllUsers():
-        print("getAllUsers")
+
         return UserType.objects.exclude("passwordHash")
 
     if reqID and reqType:
@@ -947,12 +927,17 @@ def addNewUser():
         if attemptGetUser != None:
             raise UserAlreadyExist()
 
+        password = requestData["passwordHash"]
+        passwordWiSalt = password + SECRET_KEY
+        passwordHash = hashlib.md5(passwordWiSalt.encode())
+        passwordHash = passwordHash.hexdigest()
+
         # All good, let's go ahead.
         thisUser = UserType(
             firstName=requestData["firstName"].strip(),
             lastName=requestData["lastName"].strip(),
             email=sanitisedEmail,
-            passwordHash=requestData["passwordHash"]
+            passwordHash=passwordHash
             if requestData["type"] == "host"
             else sanitisedEmail,
             created=datetime.datetime.now(),
@@ -963,13 +948,13 @@ def addNewUser():
         thisUser.save()
         return jsonify(thisUser), 200
     except UserDeleted as e:
-        print(e)
+
         return "This email is currently assigned to a deleted user", 400
     except UserAlreadyExist as e:
-        print(e)
+
         return "This email is already in use", 400
     except Exception as e:
-        print(e)
+
         return "There was an error with this request", 500
 
 
@@ -1000,14 +985,13 @@ def createHostUser():
         )
         hostUser.save()
     except UserDeleted as ud:
-        print(ud)
+
         return (jsonify("User is registered as deleted"), 400)
     except UserAlreadyExist as uae:
-        print(uae)
+
         return (jsonify("User already exists"), 400)
     except Exception as e:
-        print("There was an error in this request")
-        print(e)
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify(hostUser)
@@ -1040,14 +1024,13 @@ def createTestUser():
         )
         testUser.save()
     except UserDeleted as ud:
-        print(ud)
+
         return (jsonify("User is registered as deleted"), 400)
     except UserAlreadyExist as uae:
-        print(uae)
+
         return (jsonify("User already exists"), 400)
     except Exception as e:
-        print("There was an error in this request")
-        print(e)
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify(testUser)
@@ -1072,7 +1055,7 @@ def createDeeTestUser():
             testUser.hostOrTest = requestData["hostOrTest"]
         testUser.lastEdit = datetime.datetime.now()
     except Exception:
-        print("there was an error in the '/edit/testUser' 'PUT' request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         testUser.save()
@@ -1089,7 +1072,7 @@ def deleteUsers():
         userObj.hostOrTest = "deleted"
         userObj.save()
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify({f"STATUS": "{id} set to deleted"})
@@ -1123,9 +1106,10 @@ def checkUserType():
     return make_response({"error": "User not found"}, 400)
 
 
-@app.route("/api/questions/<id>",methods=["GET"])
+@app.route("/api/questions/<id>", methods=["GET"])
 def getSingleQuestion(id):
     return
+
 
 @app.route("/api/questions", methods=["GET"])
 def apiQuestionsGet():
@@ -1147,10 +1131,11 @@ def apiQuestionsGet():
     if categ == "_all_":
         op = {}
         for category in Categories.objects:
-            print(category.assocQuestions)
+
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(Question.objects(id=questionID).first())
+                op[category.name].append(
+                    Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1180,8 +1165,7 @@ def createQuestion():
         )
         question.save()
     except Exception as e:
-        print("There was an error in an /api/questions POST request")
-        print(e)
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return question.to_json()
@@ -1212,7 +1196,7 @@ def editsQuestion():
             question.imageURL = requestData["imageURL"]
         question.save()
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return question.to_json()
@@ -1228,10 +1212,10 @@ def deletesQuestions():
             raise ResourceNotFound(resourceType="question")
         question.delete()
     except ResourceNotFound:
-        print("Question Not Found")
+
         return (jsonify(f"Question with ID {id} does not exist"), 404)
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify("success")
@@ -1249,7 +1233,7 @@ def postCategories():
         catg = Categories(name=requestData["name"])
         catg.save()
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify(catg)
@@ -1259,7 +1243,7 @@ def postCategories():
 def putCategories():
     requestData = request.get_json()
     id = requestData["id"]
-    print(id)
+
     category = Categories.objects(id=id).first()
     try:
         category.name = requestData["name"]
@@ -1288,7 +1272,7 @@ def deletesCategories():
                 quessy.save()
                 category.delete()
     except Exception:
-        print("There was an error in this request")
+
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify("success")
@@ -1334,12 +1318,12 @@ def getAllQuizzes():
 @app.route("/api/marking", methods=["GET"])
 @app.route("/marking", methods=["GET"])
 def markingGet():
-    print(request)
+
     op = []
     quizID = request.args.get("id")
-    print(quizID)
+
     quiz = Quizzes.objects(id=quizID).first()
-    print(quiz.quenswerId)
+
     for quenswerId in quiz.quenswerId:
         quensObj = Quenswers.objects(id=quenswerId).first()
         questObj = Question.objects(id=quensObj.questionId).first()
@@ -1352,8 +1336,7 @@ def markingGet():
             "id": str(userObj.pk),
         }
         op.append({"quenswer": quensObj, "question": questObj, "user": userOp})
-    print("this is the output of marking GET")
-    print(op)
+
     return jsonify(op)
 
 
@@ -1369,9 +1352,10 @@ def batchMark():
         return ("toMark cannot be empty", 400)
     returnValue = []
     thisMarker = UserType.objects(id=requestData["userID"]).first()
-    print(f"This is this marker: {thisMarker}")
-    thisMarkerName = str("{} {}".format(thisMarker.firstName, thisMarker.lastName))
-    print(f"Marker's name: {thisMarkerName}")
+
+    thisMarkerName = str("{} {}".format(
+        thisMarker.firstName, thisMarker.lastName))
+
     try:
         for qid, outcome in requestData["toMark"].items():
             thisQuenswer = Quenswers.objects(id=qid).first()
@@ -1384,8 +1368,7 @@ def batchMark():
             returnValue.append(thisQuenswer)
         return jsonify(returnValue), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
-        print(e)
+        prRed(e)
 
 
 # 'Mark' an individual quenswer by ID
@@ -1407,8 +1390,7 @@ def markQuenswer(qid):
         thisQuenswer.save()
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
-        print(e)
+        prRed(e)
         return "Server encountered an error", 500
 
 
@@ -1421,8 +1403,7 @@ def getQuenswer(qid):
             return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
-        print(e)
+        prRed(e)
         return "Server encountered an error", 500
 
 
@@ -1462,7 +1443,7 @@ def analyticsGetUserQuestionShite(id):
             "allID": all,
         }, 200
     except Exception as e:
-        print(e)
+        prRed(e)
 
 
 @app.route("/analytics/user/questions", methods=["GET"])
@@ -1493,10 +1474,12 @@ def analyticsUserCorrectQuestionsGet():
 
     return (jsonify(op), 200)
 
+
 @app.route("/api/nocorspls", methods=["GET"])
 def shitandpissreallyhard():
     theID = request.args.get("id")
-    if theID == None: return "Bad shite",400
+    if theID == None:
+        return "Bad shite", 400
     return analyticsGetSomething(theID)
 
 
@@ -1506,7 +1489,7 @@ def analyticsGetSomething(cid):
     if thisCategory == None:
         return "Category does not exist", 400
 
-    all, correct, incorrect = 0,0,0
+    all, correct, incorrect = 0, 0, 0
     easiest, hardest = None, None
     easiestResponses, hardestResponses = 0, 0
     easiestAmount, hardestAmount = 0, 0
@@ -1517,14 +1500,14 @@ def analyticsGetSomething(cid):
         thisQuestionCorrectAmount = 0
         thisQuestionIncorrectAmount = 0
         thisQuestionResponses = 0
-        all+=1
+        all += 1
         for quenswer in Quenswers.objects(questionId=str(question.pk)):
             thisQuestionResponses += 1
             if quenswer.correct == "true":
-                correct +=1
+                correct += 1
                 thisQuestionCorrectAmount += 1
             elif quenswer.correct == "false":
-                incorrect +=1
+                incorrect += 1
                 thisQuestionIncorrectAmount += 1
 
         if thisQuestionCorrectAmount >= easiestAmount:
@@ -1549,7 +1532,7 @@ def analyticsGetSomething(cid):
         "easiestAmount": easiestAmount,
         "easiestResponses": easiestResponses,
         "hardestID": hardest,
-        "hardestName":hardestName,
+        "hardestName": hardestName,
         "hardestAmount": hardestAmount,
         "hardestResponses": hardestResponses,
     }
@@ -1609,23 +1592,15 @@ def analyticsCategoriesUserGet():
 
 @socketio.event
 def startServer7Test():
-    print("server test started")
-    # print(data)
-    print("socket sleeping for 30 seconds")
+
     socketio.sleep(30)
-    print("socket waking")
+
     emit("ServerTestFinished", "the server finished testing")
 
 
 @app.route("/server/testing1", methods=["GET"])
 def serverTesting1():
-    print(
-        """
-    #########################
-    # THE SERVER IS TESTING #
-    #########################
-    """
-    )
+    print("testing")
     return "the server can still handle requests"
 
 
@@ -1638,14 +1613,14 @@ def testBadRequestError():
 def set():
     idVar = "this is my UIDIDIDIDI"
     session["theID"] = idVar
-    # print(f"idVar is {idVar}")
+    #
     return "ok"
 
 
 @app.route("/get/", methods=["GET"])
 def get():
     yolo = request.args.get("doesnei")
-    print(yolo)
+
     return jsonify(yolo)
 
 
@@ -1662,23 +1637,22 @@ def samCustomLogin():
         )
     data = request.get_json()
     if "session" in data:
-        print("session in data")
+
         session["value"] = data["session"]
     elif "email" in data:
         if data["email"]:
             email = data["email"]
             passwordHash = data["passwordHash"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(
+                email=email, passwordHash=passwordHash).first()
             login_user(userObj)
-            print("login")
-            print(session.keys())
-            print(session.values())
+
             return "login"
         else:
             logout_user()
-            print("logout")
+
             return "logout"
-    print("things didnt go to plan")
+
     return "", 204
 
 
@@ -1694,7 +1668,7 @@ def sm():
 
 
 def assignQuenswersToQuiz(quiz):
-    print("trying to asssign quenswers")
+
     for quenswer in Quenswers.objects:
         if quenswer.quizId == quiz.roomId:
             quiz.quenswerId.append(str(quenswer.pk))
@@ -1741,19 +1715,19 @@ def markNumber(quenswerObj, questionObj):
 
 
 def autoMarking(quiz):
-    print("trying to self mark")
+
     for quenswerId in quiz.quenswerId:
         quenswerObj = Quenswers.objects(id=quenswerId).first()
         questionObj = Question.objects(id=quenswerObj.questionId).first()
         if questionObj.questionType == "trueFalse" or "multiple" or "number":
             if questionObj.questionType == "trueFalse":
-                print("marking true false")
+
                 markTrueFalse(quenswerObj, questionObj)
             elif questionObj.questionType == "multiple":
-                print("marking multiple")
+
                 markMultiple(quenswerObj, questionObj)
             elif questionObj.questionType == "number":
-                print("marking number")
+
                 markNumber(quenswerObj, questionObj)
         else:
             pass
