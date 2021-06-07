@@ -6,6 +6,7 @@ import random
 import string
 import math
 import time
+import analytics
 from flask_mongoengine import *
 
 
@@ -402,8 +403,7 @@ def login():
                 passwordHash = request_data["passwordHash"]
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -439,8 +439,7 @@ def socketLogin(data):
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -498,10 +497,10 @@ def createRoom(data):
     requestUserId = data["userID"]
     quizStarted = "False"
     questionCompleted = []
-    '''
+    """
     for question in questions:
         questionCompleted.append("")
-    '''
+    """
     activeRooms = ActiveRooms(
         roomId=quizId,
         connectedUserId=[requestUserId],
@@ -586,8 +585,7 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(
-            data["Answer"], list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -596,8 +594,11 @@ def submitAnswer(data):
     thisAnswer.save()
 
     currentQuestion = quizEnv.currentQuestion
-    newCount = Quenswers.objects(quizEnvId=str(quizEnv.pk)).filter(
-        questionId=currentQuestion).count()
+    newCount = (
+        Quenswers.objects(quizEnvId=str(quizEnv.pk))
+        .filter(questionId=currentQuestion)
+        .count()
+    )
 
     if newCount >= (len(quizEnv.connectedUserId) - 1):
         print("We have received the same or more responses than connected users")
@@ -624,11 +625,11 @@ def startQuiz(data):
     for k, v in data.items():
         print(f"{k} -> {v}")
     curUserId = data["userID"]
-    '''
+    """
     print("startQuiz")
     print(data.keys())
     print(data.values())
-    '''
+    """
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
     quizEnv.quizStarted = "True"
     quizEnv.save()
@@ -687,7 +688,7 @@ def startQuiz(data):
         print("finishQuestion")
         print(op["finishQuestion"])
 
-        emit("startedQuiz", (len(questionLs)+1), to=roomId)
+        emit("startedQuiz", (len(questionLs) + 1), to=roomId)
 
         print("the quizEnv firstQuestion should have been set by now")
         print(quizEnv.currentQuestion)
@@ -755,8 +756,7 @@ def sendQuestion(data):
         op["bodyMD"] = questionObj.bodyMD
         op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
-        op["finishQuestion"] = math.floor(
-            tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
         # print(type(op["finishQuestion"]))
         # print("finishQuestion")
@@ -789,7 +789,7 @@ def sendQuestion(data):
             emit("questionTimeout", to=roomId)
             return
 
-        '''
+        """
         else:
             currQuestionListIndex = quizEnvUpToDate.allQuestions.index(
                 quizEnvUpToDate.currentQuestion
@@ -802,7 +802,7 @@ def sendQuestion(data):
                 print(f"\033[93m Question timed out, emitting event'\033[0m'")
                 emit("questionTimeout", to=roomId)
         #   print(op)
-        '''
+        """
 
 
 @socketio.event
@@ -881,6 +881,7 @@ def onRoomUpdated(roomId):
 # GET Users
 
 
+@app.route("/api/users", methods=["GET"])
 @app.route("/get/users", methods=["GET"])
 def getUsers():
     reqID, reqType = request.args.get("id"), request.args.get("type")
@@ -892,25 +893,14 @@ def getUsers():
 
     def getUserByType(type):
         print("getUserByType")
-        op2 = []
+        op = []
         for user in UserType.objects(hostOrTest=type):
-            op2.append(
-                UserType.objects(id=str(user.pk)).exclude(
-                    "passwordHash").first()
-            )
-        return op2
+            op.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
+        return op
 
     def getAllUsers():
         print("getAllUsers")
-        print(UserType.objects)
-        op3 = {}
-        for user in UserType.objects:
-            op3[user.get_id()] = (
-                UserType.objects(id=str(user.pk)).exclude(
-                    "passwordHash").first()
-            )
-        print(op3)
-        return op3
+        return UserType.objects.exclude("passwordHash")
 
     if reqID and reqType:
         return ("Cannot filter by both type and ID.", 400)
@@ -1133,6 +1123,10 @@ def checkUserType():
     return make_response({"error": "User not found"}, 400)
 
 
+@app.route("/api/questions/<id>",methods=["GET"])
+def getSingleQuestion(id):
+    return
+
 @app.route("/api/questions", methods=["GET"])
 def apiQuestionsGet():
     getID, categ = request.args.get("id"), request.args.get("category")
@@ -1156,8 +1150,7 @@ def apiQuestionsGet():
             print(category.assocQuestions)
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(
-                    Question.objects(id=questionID).first())
+                op[category.name].append(Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1375,20 +1368,23 @@ def batchMark():
     if len(requestData["toMark"]) < 1:
         return ("toMark cannot be empty", 400)
     returnValue = []
+    thisMarker = UserType.objects(id=requestData["userID"]).first()
+    print(f"This is this marker: {thisMarker}")
+    thisMarkerName = str("{} {}".format(thisMarker.firstName, thisMarker.lastName))
+    print(f"Marker's name: {thisMarkerName}")
     try:
         for qid, outcome in requestData["toMark"].items():
             thisQuenswer = Quenswers.objects(id=qid).first()
             if thisQuenswer == None:
                 return ("One or more quenswer IDs are invalid", 400)
             thisQuenswer.correct = "true" if outcome else "false"
-            thisQuenswer.markedBy = requestData["userID"]
-            # thisQuenswer.markedDateTime = datetime.datetime.now(),
+            thisQuenswer.markedBy = thisMarkerName
+            thisQuenswer.markedDateTime = datetime.datetime.now()
             thisQuenswer.save()
             returnValue.append(thisQuenswer)
         return jsonify(returnValue), 200
     except Exception as e:
-        print(
-            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
 
 
@@ -1411,8 +1407,7 @@ def markQuenswer(qid):
         thisQuenswer.save()
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(
-            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1426,8 +1421,7 @@ def getQuenswer(qid):
             return "No results for that ID", 400
         return jsonify(thisQuenswer), 200
     except Exception as e:
-        print(
-            f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
+        print(f"\033[91mEncountered exception on route {request.url_rule}\033[0m")
         print(e)
         return "Server encountered an error", 500
 
@@ -1446,9 +1440,38 @@ def putMarking():
     return (jsonify(quenswer), 200)
 
 
+@app.route("/api/user/<id>/analytics/questions", methods=["GET"])
+def analyticsGetUserQuestionShite(id):
+    try:
+        thisUser = UserType.objects(id=id)
+        if thisUser == None:
+            return "No user assosciated with that ID", 400
+        all, correct, incorrect = [], [], []
+        for q in Quenswers.objects(userId=id):
+            thisID = str(q.pk)
+            all.append(thisID)
+            if q.correct == "true":
+                correct.append(thisID)
+            elif q.correct == "false":
+                incorrect.append(thisID)
+        return {
+            "correctID": correct,
+            "correctAmount": len(correct),
+            "incorrectID": incorrect,
+            "incorrectAmount": len(incorrect),
+            "allID": all,
+        }, 200
+    except Exception as e:
+        print(e)
+
+
 @app.route("/analytics/user/questions", methods=["GET"])
 def analyticsUserCorrectQuestionsGet():
     requestData = request.get_json()
+
+    if not logic.assertExists(["userId"], requestData):
+        return ("Insufficent data", 400)
+
     userId = requestData["userId"]
     opcorect = []
     opincorect = []
@@ -1460,23 +1483,90 @@ def analyticsUserCorrectQuestionsGet():
             opcorect.append(str(quenswer.pk))
         elif quenswer.correct == "false":
             opincorect.append(str(quenswer.pk))
-    op['userId'] = userId
+    op["userId"] = userId
     op["correctId"] = opcorect
     op["correctLen"] = len(opcorect)
     op["incorrectId"] = opincorect
     op["incorrectLen"] = len(opincorect)
     op["allId"] = allqs
     op["allLen"] = len(allqs)
-    return(jsonify(op))
+
+    return (jsonify(op), 200)
+
+@app.route("/api/nocorspls", methods=["GET"])
+def shitandpissreallyhard():
+    theID = request.args.get("id")
+    if theID == None: return "Bad shite",400
+    return analyticsGetSomething(theID)
+
+
+@app.route("/api/categories/<cid>/analytics/", methods=["GET"])
+def analyticsGetSomething(cid):
+    thisCategory = Categories.objects(id=cid).first()
+    if thisCategory == None:
+        return "Category does not exist", 400
+
+    all, correct, incorrect = 0,0,0
+    easiest, hardest = None, None
+    easiestResponses, hardestResponses = 0, 0
+    easiestAmount, hardestAmount = 0, 0
+
+    for question in Question.objects(category=thisCategory.name):
+
+        thisQID = str(question.pk)
+        thisQuestionCorrectAmount = 0
+        thisQuestionIncorrectAmount = 0
+        thisQuestionResponses = 0
+        all+=1
+        for quenswer in Quenswers.objects(questionId=str(question.pk)):
+            thisQuestionResponses += 1
+            if quenswer.correct == "true":
+                correct +=1
+                thisQuestionCorrectAmount += 1
+            elif quenswer.correct == "false":
+                incorrect +=1
+                thisQuestionIncorrectAmount += 1
+
+        if thisQuestionCorrectAmount >= easiestAmount:
+            easiest = thisQID
+            easiestAmount = thisQuestionCorrectAmount
+            easiestResponses = thisQuestionResponses
+
+        if thisQuestionIncorrectAmount >= hardestAmount:
+            hardest = thisQID
+            hardestAmount = thisQuestionIncorrectAmount
+            hardestResponses = thisQuestionResponses
+
+    easiestName = Question.objects(id=easiest).first().title
+    hardestName = Question.objects(id=hardest).first().title
+
+    return {
+        "allAmount": all,
+        "correctAmount": correct,
+        "incorrectAmount": incorrect,
+        "easiestID": easiest,
+        "easiestName": easiestName,
+        "easiestAmount": easiestAmount,
+        "easiestResponses": easiestResponses,
+        "hardestID": hardest,
+        "hardestName":hardestName,
+        "hardestAmount": hardestAmount,
+        "hardestResponses": hardestResponses,
+    }
 
 
 @app.route("/analytics/categories/questions", methods=["GET"])
 def analyticsCategoriesQuestionsGet():
     requestData = request.get_json()
+
+    if not logic.assertExists(["categId"], requestData):
+        return ("Insufficent data", 400)
+
     categId = requestData["categId"]
     categObj = Categories.objects(id=categId).first()
     correct = {}
     incorrect = {}
+
     for question in Question.objects(category=categObj.name):
         correct[str(question.pk)] = 0
         incorrect[str(question.pk)] = 0
@@ -1485,15 +1575,17 @@ def analyticsCategoriesQuestionsGet():
                 correct[str(question.pk)] += 1
             elif quenswer.correct == "false":
                 incorrect[str(question.pk)] += 1
-    return(jsonify({
-        "correct": correct,
-        "incorrect": incorrect
-    }))
+
+    return (jsonify({"correct": correct, "incorrect": incorrect}), 200)
 
 
 @app.route("/analytics/categories/user", methods=["GET"])
 def analyticsCategoriesUserGet():
     requestData = request.get_json()
+
+    if not logic.assertExists(["userId", ["categId"]], requestData):
+        return ("Insufficent data", 400)
+
     categId = requestData["categId"]
     userId = requestData["userId"]
     categObj = Categories.objects(id=categId).first()
@@ -1507,10 +1599,7 @@ def analyticsCategoriesUserGet():
                 correct[str(question.pk)] += 1
             elif quenswer.correct == "false":
                 incorrect[str(question.pk)] += 1
-    return(jsonify({
-        "correct": correct,
-        "incorrect": incorrect
-    }))
+    return (jsonify({"correct": correct, "incorrect": incorrect}), 200)
 
 
 ############################################
@@ -1579,8 +1668,7 @@ def samCustomLogin():
         if data["email"]:
             email = data["email"]
             passwordHash = data["passwordHash"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             login_user(userObj)
             print("login")
             print(session.keys())
@@ -1617,7 +1705,9 @@ def assignQuenswersToQuiz(quiz):
 def markTrueFalse(quenswerObj, questionObj):
     quenswerObj.markedBy = "System"
     quenswerObj.markedDateTime = datetime.datetime.now()
-    quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+    quenswerObj.correct = (
+        "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+    )
     quenswerObj.save()
 
 
@@ -1626,20 +1716,27 @@ def markMultiple(quenswerObj, questionObj):
         for userAnswer in quenswerObj.answer:
             quenswerObj.markedBy = "System"
             quenswerObj.markedDateTime = datetime.datetime.now()
-            quenswerObj.correct = "true" if userAnswer in questionObj.answer else "false"
+            quenswerObj.correct = (
+                "true" if userAnswer in questionObj.answer else "false"
+            )
             quenswerObj.save()
     else:
         quenswerObj.markedBy = "System"
         quenswerObj.markedDateTime = datetime.datetime.now()
-        quenswerObj.correct = "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+        quenswerObj.correct = (
+            "true" if quenswerObj.answer[0] == questionObj.answer[0] else "false"
+        )
         quenswerObj.save()
 
 
 def markNumber(quenswerObj, questionObj):
     quenswerObj.markedBy = "System"
     quenswerObj.markedDateTime = datetime.datetime.now()
-    quenswerObj.correct = "true" if float(quenswerObj.answer[0]) == float(
-        questionObj.answer[0]) else "false"
+    quenswerObj.correct = (
+        "true"
+        if float(quenswerObj.answer[0]) == float(questionObj.answer[0])
+        else "false"
+    )
     quenswerObj.save()
 
 
