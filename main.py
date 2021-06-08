@@ -648,6 +648,7 @@ def startQuiz(data):
         curQuestion = questionLs[0]
         quizEnv.currentQuestion = curQuestion
         quizEnv.questions.remove(curQuestion)
+        quizEnv.quizstarted = "True"
         quizEnv.firstQuestion = "True"
         quizEnv.save()
 
@@ -708,11 +709,7 @@ def sendQuestion(data):
 
             raise LastQuestion(quizEnv.roomId)
 
-        #
-        #
         questionLs = quizEnv.questions
-        #
-        #
 
         if quizEnv.firstQuestion == "True":
             curQuestion = quizEnv.currentQuestion
@@ -749,11 +746,6 @@ def sendQuestion(data):
         op["finishQuestion"] = math.floor(
             tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
-        #
-        #
-        #
-        #
-        #
     except LastQuestion as lqe:
         prRed(lqe)
     except Exception as e:
@@ -799,6 +791,9 @@ def finishQuiz(data):
     room = data["room"]
     # close_room(room)
     curUserId = data["userID"]
+
+    print(f"Room: {room}")
+    print(f"User Id {curUserId}")
     quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
 
     quiz = Quizzes(
@@ -816,8 +811,15 @@ def finishQuiz(data):
     quizEnv.delete()
     emit("notifyFinishQuiz", to=room)
     prCyan(f"{room} completed")
-    assignQuenswersToQuiz(quiz)
+    prGreen(
+        f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}"
+    )
+    print(len(quiz.quenswerId))
+    while len(quiz.quenswerId) == 0:
+        assignQuenswersToQuiz(quiz)
     autoMarking(quiz)
+    prGreen(
+        f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
 
 ############################
 # SOCKETIO LOGIC FUNCTIONS #
@@ -866,8 +868,6 @@ def onRoomUpdated(roomId):
 
 
 # GET Users
-
-
 @app.route("/api/users", methods=["GET"])
 @app.route("/get/users", methods=["GET"])
 def getUsers():
@@ -1690,7 +1690,6 @@ def sm():
 
 
 def assignQuenswersToQuiz(quiz):
-
     for quenswer in Quenswers.objects:
         if quenswer.quizId == quiz.roomId:
             quiz.quenswerId.append(str(quenswer.pk))
