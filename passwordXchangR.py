@@ -8,4 +8,4 @@ passwordHash = hashlib.md5(passwordWiSalt.encode())
 passwordHash = passwordHash.hexdigest()
 
 
-print("goes to " + ersgrehgpasswordHash)
+print("goes to " + passwordHash)

@@ -33,7 +33,6 @@ def prLightPurple(skk): print("\033[94m {}\033[00m" .format(skk))
 def prPurple(skk): print("\033[95m {}\033[00m" .format(skk))
 def prCyan(skk): print("\033[96m {}\033[00m" .format(skk))
 def prLightGray(skk): print("\033[97m {}\033[00m" .format(skk))
-def prBlack(skk): print("\033[98m {}\033[00m" .format(skk))
 
 
 app = Flask(__name__)
@@ -421,6 +420,7 @@ def login():
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
+                prGreen(f"HTTP {userObj.firstName} {userObj.lastName} logged in")
 
                 return (
                     jsonify(
@@ -433,6 +433,7 @@ def login():
                     200,
                 )
             else:
+                prRed("HTTP Username or Password error")
                 return (jsonify("Username or password error"), 401)
 
 
@@ -455,6 +456,7 @@ def socketLogin(data):
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
+                (f"SOCKET {userObj.firstName} {userObj.lastName} logged in")
 
                 send({"status": "success", "userID": userObj.get_id()})
             else:
@@ -468,6 +470,7 @@ def socketLogin(data):
 @login_required
 def logout():
     logout_user()
+    prGreen("User Logged Out")
     return (jsonify("logout success"), 200)
 
 
@@ -528,6 +531,7 @@ def createRoom(data):
 
     # emit('id', f'ID {quizId}', namespace='/', )
     join_room(quizId)
+    prLightPurple(f"{quizId} was initiated")
     return quizId
 
 
@@ -558,6 +562,7 @@ def on_join(data):
     ]
 
     emit("onRoomUpdated", newUserName, to=room)
+    prGreen(f"{newUserName} joined {room}")
     return (tempArray, roomObj.timeLimit)
 
 
