@@ -1445,10 +1445,10 @@ def putMarking():
     return (jsonify(quenswer), 200)
 
 
-@app.route("/api/user/<id>/analytics/questions", methods=["GET"])
+@app.route("/api/users/<id>/analytics/questions", methods=["GET"])
 def analyticsGetUserQuestionShite(id):
     try:
-        thisUser = UserType.objects(id=id)
+        thisUser = UserType.objects(id=id).first()
         if thisUser == None:
             return "No user assosciated with that ID", 400
         all, correct, incorrect = [], [], []
@@ -1460,6 +1460,7 @@ def analyticsGetUserQuestionShite(id):
             elif q.correct == "false":
                 incorrect.append(thisID)
         return {
+            "fullname" : f"{thisUser.firstName} {thisUser.lastName}",
             "correctID": correct,
             "correctAmount": len(correct),
             "incorrectID": incorrect,
