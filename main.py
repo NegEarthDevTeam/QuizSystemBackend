@@ -2,6 +2,7 @@ from logging import error, exception
 from re import U
 from warnings import catch_warnings
 import logic
+import traceback
 import random
 import string
 import math
@@ -420,7 +421,8 @@ def login():
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
-                prGreen(f"HTTP {userObj.firstName} {userObj.lastName} logged in")
+                prGreen(
+                    f"HTTP {userObj.firstName} {userObj.lastName} logged in")
 
                 return (
                     jsonify(
@@ -613,8 +615,10 @@ def submitAnswer(data):
         newEnv.save()
 
         emit("questionTimeout", to=roomId)
+        prPurple(f"all users answered {currentQuestion} in {str(quizEnv.pk)}")
         return "yolo"
         # Prematurely end quiz
+    prGreen(f"{str(curUserId)} just submitted an answer to {roomId}")
 
 
 # Send Question to quizspace
@@ -683,10 +687,11 @@ def startQuiz(data):
         emit("startedQuiz", (len(questionLs) + 1), to=roomId)
 
     except Exception as err:
-
+        prRed(f"There where no questions assigned to {roomId}")
+        prRed(err)
         send("There were no questions in this quiz")
     else:
-
+        prLightPurple(f"{roomId} room started quizzing")
         return op
 
 
@@ -755,8 +760,7 @@ def sendQuestion(data):
         prRed(e)
 
     else:
-        #
-        #
+        prGreen(f"emitting question{op} to {roomId}")
         emit("receiveQuestion", op, to=roomId)
 
         socketio.sleep(quizEnv.timeLimit)
@@ -811,10 +815,9 @@ def finishQuiz(data):
     quiz.save()
     quizEnv.delete()
     emit("notifyFinishQuiz", to=room)
+    prCyan(f"{room} completed")
     assignQuenswersToQuiz(quiz)
     autoMarking(quiz)
-    # TODO make the server attempt at self marking
-
 
 ############################
 # SOCKETIO LOGIC FUNCTIONS #
@@ -853,7 +856,7 @@ def onRoomUpdated(roomId):
         userObj = UserType.objects(id=user).first()
         op.append(userObj.firstName)
     room.save()
-
+    prGreen(f"{op} joined {roomId}")
     emit("onRoomUpdated", op, to=roomId)
 
 
@@ -895,7 +898,6 @@ def getUsers():
 
     if reqType:
         return jsonify(getUserByType(reqType))
-
     return jsonify(getAllUsers())
 
 
@@ -915,7 +917,7 @@ def addNewUser():
         return "Invalid data for `type`", 400
 
     if requestData["type"] == "host":
-        expectedData.append("passwordHash")
+        expectedData.append("password")
 
     # Sanitise email & transform to lowercase to ensure consistency
     sanitisedEmail = requestData["email"].lower().strip()
@@ -932,7 +934,7 @@ def addNewUser():
         if attemptGetUser != None:
             raise UserAlreadyExist()
 
-        password = requestData["passwordHash"]
+        password = requestData["password"]
         passwordWiSalt = password + SECRET_KEY
         passwordHash = hashlib.md5(passwordWiSalt.encode())
         passwordHash = passwordHash.hexdigest()
@@ -1077,9 +1079,10 @@ def deleteUsers():
         userObj.hostOrTest = "deleted"
         userObj.save()
     except Exception:
-
+        prRed(f"Unable to delete user {id}")
         return (jsonify("BAD REQUEST"), 400)
     else:
+        prYellow(f"{id} set to deleted")
         return jsonify({f"STATUS": "{id} set to deleted"})
 
 
@@ -1217,12 +1220,13 @@ def deletesQuestions():
             raise ResourceNotFound(resourceType="question")
         question.delete()
     except ResourceNotFound:
-
+        prRed(f"Question with ID {id} does not exist")
         return (jsonify(f"Question with ID {id} does not exist"), 404)
     except Exception:
-
+        prRed("Bad request")
         return (jsonify("BAD REQUEST"), 400)
     else:
+        prYellow(f"Question {id} deleted")
         return jsonify("success")
 
 
@@ -1268,7 +1272,7 @@ def deletesCategories():
         category = Categories.objects(id=id).first()
         if not category:
             raise ResourceNotFound(resourceType="category")
-        if not category.assocQuestions():
+        if not category.assocQuestions:
             category.delete()
         else:
             for questions in category.assocQuestions():
@@ -1276,10 +1280,13 @@ def deletesCategories():
                 quessy.category = migrateTo
                 quessy.save()
                 category.delete()
-    except Exception:
-
+    except Exception as e:
+        prRed(e)
+        prRed("Bad Request")
+        traceback.print_exc()
         return (jsonify("BAD REQUEST"), 400)
     else:
+        prYellow(f"{id} category deleted")
         return jsonify("success")
 
 
@@ -1288,6 +1295,7 @@ def deletesCategories():
 def deleteAllActiveRooms():
     for room in ActiveRooms.objects:
         room.delete()
+    prYellow("All rooms deleted")
     return "success"
 
 
@@ -1296,6 +1304,7 @@ def deleteAllActiveRooms():
 def deleteAllQuizzes():
     for quiz in Quizzes.objects:
         quiz.delete()
+    prYellow("All quizzes deleted")
     return "success"
 
 
@@ -1304,6 +1313,7 @@ def deleteAllQuizzes():
 def deleteAllQuenswers():
     for quenswer in Quenswers.objects:
         quenswer.delete()
+    prYellow("All quenswers deleted")
     return "success"
 
 
@@ -1371,9 +1381,12 @@ def batchMark():
             thisQuenswer.markedDateTime = datetime.datetime.now()
             thisQuenswer.save()
             returnValue.append(thisQuenswer)
-        return jsonify(returnValue), 200
+
     except Exception as e:
         prRed(e)
+    else:
+        prGreen(f"Multiple Quenswers marked successfully")
+        return jsonify(returnValue), 200
 
 
 # 'Mark' an individual quenswer by ID
@@ -1393,10 +1406,13 @@ def markQuenswer(qid):
         thisQuenswer.markedBy = requestData["userID"]
         # thisQuenswer.markedDateTime = datetime.datetime.now(),
         thisQuenswer.save()
-        return jsonify(thisQuenswer), 200
+
     except Exception as e:
         prRed(e)
         return "Server encountered an error", 500
+    else:
+        prGreen(f"Quenswer {str(thisQuenswer.pk)} was successfully marked")
+        return jsonify(thisQuenswer), 200
 
 
 # Get an individual quenswer by ID
@@ -1490,6 +1506,7 @@ def shitandpissreallyhard():
 
 @app.route("/api/categories/<cid>/analytics/", methods=["GET"])
 def analyticsGetSomething(cid):
+
     thisCategory = Categories.objects(id=cid).first()
     if thisCategory == None:
         return "Category does not exist", 400
