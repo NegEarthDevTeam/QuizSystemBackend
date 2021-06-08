@@ -1163,11 +1163,13 @@ def apiQuestionsGet():
 @app.route("/api/questions", methods=["POST"])
 def createQuestion():
     requestData = request.get_json()
+    answer = [requestData["answer"]]
+
     try:
         question = Question(
             category=requestData["category"],
             questionType=requestData["questionType"],
-            answer=requestData["answer"],
+            answer=answer,
             poll=requestData["poll"] if "poll" in requestData else None,
             title=requestData["title"],
             bodyMD=requestData["bodyMD"],
@@ -1176,7 +1178,7 @@ def createQuestion():
         )
         question.save()
     except Exception as e:
-
+        prRed(e)
         return (jsonify("BAD REQUEST"), 400)
     else:
         return question.to_json()
@@ -1460,7 +1462,7 @@ def analyticsGetUserQuestionShite(id):
             elif q.correct == "false":
                 incorrect.append(thisID)
         return {
-            "fullname" : f"{thisUser.firstName} {thisUser.lastName}",
+            "fullname": f"{thisUser.firstName} {thisUser.lastName}",
             "correctID": correct,
             "correctAmount": len(correct),
             "incorrectID": incorrect,
