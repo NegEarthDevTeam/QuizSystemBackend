@@ -794,7 +794,7 @@ def finishQuiz(data):
 
     print(f"Room: {room}")
     print(f"User Id {curUserId}")
-    quizEnv = ActiveRooms.objects(connectedUserId=curUserId).first()
+    quizEnv = ActiveRooms.objects(roomId=room).first()
 
     quiz = Quizzes(
         roomId=quizEnv.roomId,
@@ -814,9 +814,12 @@ def finishQuiz(data):
     prGreen(
         f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}"
     )
+    x = 0
     print(len(quiz.quenswerId))
     while len(quiz.quenswerId) == 0:
         assignQuenswersToQuiz(quiz)
+        x += 1
+    print(f"len is now {len(quiz.quenswerId)} it took {x} attempts")
     autoMarking(quiz)
     prGreen(
         f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
@@ -1470,10 +1473,8 @@ def analyticsGetUserQuestionShite(id):
 @app.route("/analytics/user/questions", methods=["GET"])
 def analyticsUserCorrectQuestionsGet():
     requestData = request.get_json()
-
     if not logic.assertExists(["userId"], requestData):
         return ("Insufficent data", 400)
-
     userId = requestData["userId"]
     opcorect = []
     opincorect = []
@@ -1492,7 +1493,6 @@ def analyticsUserCorrectQuestionsGet():
     op["incorrectLen"] = len(opincorect)
     op["allId"] = allqs
     op["allLen"] = len(allqs)
-
     return (jsonify(op), 200)
 
 
