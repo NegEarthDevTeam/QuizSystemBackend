@@ -1163,7 +1163,7 @@ def apiQuestionsGet():
 @app.route("/api/questions", methods=["POST"])
 def createQuestion():
     requestData = request.get_json()
-    answer = [requestData["answer"]]
+    answer = requestData["answer"]
 
     try:
         question = Question(
@@ -1770,3 +1770,6 @@ if __name__ == "__main__":
 #################
 
 # TODO if a question is marked as first and last it will cause the server to not emit any questions
+# TODO add a question sent time to the activeRoom object and then a questionSent time and a QuestionReceived time to the Quenswer Object
+
+#
