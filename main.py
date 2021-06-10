@@ -1560,6 +1560,7 @@ def analyticsGetSomething(cid):
         "hardestName": hardestName,
         "hardestAmount": hardestAmount,
         "hardestResponses": hardestResponses,
+        "categoryName": thisCategory.name
     }
 
 
