@@ -27,13 +27,32 @@ global db
 global SECRET_KEY
 
 
-def prRed(skk): print("\033[91m {}\033[00m" .format(skk))
-def prGreen(skk): print("\033[92m {}\033[00m" .format(skk))
-def prYellow(skk): print("\033[93m {}\033[00m" .format(skk))
-def prLightPurple(skk): print("\033[94m {}\033[00m" .format(skk))
-def prPurple(skk): print("\033[95m {}\033[00m" .format(skk))
-def prCyan(skk): print("\033[96m {}\033[00m" .format(skk))
-def prLightGray(skk): print("\033[97m {}\033[00m" .format(skk))
+def prRed(skk):
+    print("\033[91m {}\033[00m".format(skk))
+
+
+def prGreen(skk):
+    print("\033[92m {}\033[00m".format(skk))
+
+
+def prYellow(skk):
+    print("\033[93m {}\033[00m".format(skk))
+
+
+def prLightPurple(skk):
+    print("\033[94m {}\033[00m".format(skk))
+
+
+def prPurple(skk):
+    print("\033[95m {}\033[00m".format(skk))
+
+
+def prCyan(skk):
+    print("\033[96m {}\033[00m".format(skk))
+
+
+def prLightGray(skk):
+    print("\033[97m {}\033[00m".format(skk))
 
 
 app = Flask(__name__)
@@ -416,13 +435,11 @@ def login():
                 passwordHash = passwordHash.hexdigest()
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
-                prGreen(
-                    f"HTTP {userObj.firstName} {userObj.lastName} logged in")
+                prGreen(f"HTTP {userObj.firstName} {userObj.lastName} logged in")
 
                 return (
                     jsonify(
@@ -453,8 +470,7 @@ def socketLogin(data):
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -592,8 +608,7 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(
-            data["Answer"], list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
@@ -743,8 +758,7 @@ def sendQuestion(data):
         op["bodyMD"] = questionObj.bodyMD
         op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
-        op["finishQuestion"] = math.floor(
-            tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
     except LastQuestion as lqe:
         prRed(lqe)
@@ -811,9 +825,7 @@ def finishQuiz(data):
     quizEnv.delete()
     emit("notifyFinishQuiz", to=room)
     prCyan(f"{room} completed")
-    prGreen(
-        f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}"
-    )
+    prGreen(f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}")
     x = 0
     print(len(quiz.quenswerId))
     while len(quiz.quenswerId) == 0:
@@ -821,8 +833,8 @@ def finishQuiz(data):
         x += 1
     print(f"len is now {len(quiz.quenswerId)} it took {x} attempts")
     autoMarking(quiz)
-    prGreen(
-        f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
+    prGreen(f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
+
 
 ############################
 # SOCKETIO LOGIC FUNCTIONS #
@@ -885,8 +897,7 @@ def getUsers():
 
         op = []
         for user in UserType.objects(hostOrTest=type):
-            op.append(UserType.objects(id=str(user.pk)
-                                       ).exclude("passwordHash").first())
+            op.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
         return op
 
     def getAllUsers():
@@ -1145,8 +1156,7 @@ def apiQuestionsGet():
 
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(
-                    Question.objects(id=questionID).first())
+                op[category.name].append(Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1373,8 +1383,7 @@ def batchMark():
     returnValue = []
     thisMarker = UserType.objects(id=requestData["userID"]).first()
 
-    thisMarkerName = str("{} {}".format(
-        thisMarker.firstName, thisMarker.lastName))
+    thisMarkerName = str("{} {}".format(thisMarker.firstName, thisMarker.lastName))
 
     try:
         for qid, outcome in requestData["toMark"].items():
@@ -1560,7 +1569,7 @@ def analyticsGetSomething(cid):
         "hardestName": hardestName,
         "hardestAmount": hardestAmount,
         "hardestResponses": hardestResponses,
-        "categoryName": thisCategory.name
+        "categoryName": thisCategory.name,
     }
 
 
@@ -1669,8 +1678,7 @@ def samCustomLogin():
         if data["email"]:
             email = data["email"]
             passwordHash = data["passwordHash"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             login_user(userObj)
 
             return "login"
@@ -1772,5 +1780,6 @@ if __name__ == "__main__":
 
 # TODO if a question is marked as first and last it will cause the server to not emit any questions
 # TODO add a question sent time to the activeRoom object and then a questionSent time and a QuestionReceived time to the Quenswer Object
+# TODO Undeleting users
 
-#
+
