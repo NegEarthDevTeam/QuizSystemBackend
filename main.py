@@ -23,17 +23,40 @@ from flask_login import (
 )
 from flask_session import Session
 
+# Argon2 implementation
+from argon2 import PasswordHasher
+from argon2 import exceptions as Argon2Exceptions
+
 global db
 global SECRET_KEY
 
 
-def prRed(skk): print("\033[91m {}\033[00m" .format(skk))
-def prGreen(skk): print("\033[92m {}\033[00m" .format(skk))
-def prYellow(skk): print("\033[93m {}\033[00m" .format(skk))
-def prLightPurple(skk): print("\033[94m {}\033[00m" .format(skk))
-def prPurple(skk): print("\033[95m {}\033[00m" .format(skk))
-def prCyan(skk): print("\033[96m {}\033[00m" .format(skk))
-def prLightGray(skk): print("\033[97m {}\033[00m" .format(skk))
+def prRed(skk):
+    print("\033[91m {}\033[00m".format(skk))
+
+
+def prGreen(skk):
+    print("\033[92m {}\033[00m".format(skk))
+
+
+def prYellow(skk):
+    print("\033[93m {}\033[00m".format(skk))
+
+
+def prLightPurple(skk):
+    print("\033[94m {}\033[00m".format(skk))
+
+
+def prPurple(skk):
+    print("\033[95m {}\033[00m".format(skk))
+
+
+def prCyan(skk):
+    print("\033[96m {}\033[00m".format(skk))
+
+
+def prLightGray(skk):
+    print("\033[97m {}\033[00m".format(skk))
 
 
 app = Flask(__name__)
@@ -59,6 +82,9 @@ app.secret_key = "quizSystemSecretKey"
 
 
 socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
+
+# establish passwordhasher
+ph = PasswordHasher()
 
 
 #####################
@@ -255,6 +281,7 @@ class ActiveRooms(db.Document):
     timeLimit = db.IntField()
     currentQuestion = db.StringField()
     lastQuestion = db.StringField()
+    lastQuestionSentTimestamp = db.DateTimeField()
     firstQuestion = db.StringField()
     hostId = db.StringField()
 
@@ -282,6 +309,7 @@ class Quenswers(db.Document):
     questionId = db.StringField()
     answer = db.ListField()
     submitDateTime = db.DateTimeField()
+    questionSentTimestamp = db.DateTimeField()
     quizEnvId = db.StringField()
     quizId = db.StringField()
     markedBy = db.StringField()
@@ -399,16 +427,59 @@ def loaduser(id):
 login_manager.session_protection = "strong"
 
 
-@app.route("/api/Login", methods=["POST"])
+@app.route("/api/login", methods=["POST"])
 def login():
-    request_data = request.get_json()
-    data = request_data
+    requestData = request.get_json()
+
+    if not logic.assertExists(["email", "password"], requestData):
+        return ("Insufficent data", 400)
+
+    thisEmail, thisPassword = requestData["email"], requestData["password"]
+
+    # Check user exists, but don't notify that user exists if password is wrong!
+    thisUser = UserType.objects(email=thisEmail).first()
+    if thisUser == None:
+        return ("Username and password combination do not exist", 400)
+
+    try:
+        ph.verify(thisUser.passwordHash, thisPassword)
+        # Verify raises an exception if it fails, so it must be OK if it gets to this point.
+        if ph.check_needs_rehash(thisUser.passwordHash):
+            thisUser.update(passwordHash=ph.hash(thisPassword))
+
+        login_user(thisUser)
+
+        thisUser.update(lastSignIn=datetime.datetime.now())
+        prGreen(f"HTTP {thisUser.firstName} {thisUser.lastName} has logged in")
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "userID": thisUser.get_id(),
+                    "userName": f"{thisUser.firstName} {thisUser.lastName}",
+                }
+            ),
+            200,
+        )
+
+    except Argon2Exceptions.VerificationError as e:
+        prRed("Password verification error occurred.")
+        prRed(e)
+        return "Username and password combination do not exist", 400
+    except Exception as e:
+        prRed("Exception occurred.")
+        prRed(e)
+        return "Server error", 500
+
+    """
+
+    data = requestData
 
     if "session" in data:
         session["value"] = data["session"]
     elif "email" in data:
         if data["email"]:
-            email = request_data["email"]
+            email = requestData["email"]
             if "passwordHash" in request_data:
                 password = request_data["passwordHash"]
                 passwordWiSalt = password + SECRET_KEY
@@ -416,13 +487,11 @@ def login():
                 passwordHash = passwordHash.hexdigest()
             else:
                 passwordHash = request_data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
-                prGreen(
-                    f"HTTP {userObj.firstName} {userObj.lastName} logged in")
+                prGreen(f"HTTP {userObj.firstName} {userObj.lastName} logged in")
 
                 return (
                     jsonify(
@@ -437,6 +506,7 @@ def login():
             else:
                 prRed("HTTP Username or Password error")
                 return (jsonify("Username or password error"), 401)
+                """
 
 
 @socketio.on("socketLogin")
@@ -453,8 +523,7 @@ def socketLogin(data):
                 passwordHash = data["passwordHash"]
             else:
                 passwordHash = data["email"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             if userObj:
                 login_user(userObj)
                 userObj.update(lastSignIn=datetime.datetime.now())
@@ -592,12 +661,12 @@ def submitAnswer(data):
     thisAnswer = Quenswers(
         userId=str(curUserId),
         questionId=quizEnv.currentQuestion,
-        answer=data["Answer"] if isinstance(
-            data["Answer"], list) else [data["Answer"]],
+        answer=data["Answer"] if isinstance(data["Answer"], list) else [data["Answer"]],
         submitDateTime=datetime.datetime.now(),
         quizEnvId=str(quizEnv.pk),
         quizId=quizEnv.roomId,
         correct="unMarked",
+        questionSentTimestamp=quizEnv.lastQuestionSentTimestamp,
     )
     thisAnswer.save()
 
@@ -728,6 +797,8 @@ def sendQuestion(data):
             op["lastQuestion"] = "False"
             quizEnv.lastQuestion = "False"
 
+        quizEnv.lastQuestionSentTimestamp = datetime.datetime.now()
+
         quizEnv.save()
 
         questionObj = Question.objects(id=curQuestion).first()
@@ -743,8 +814,7 @@ def sendQuestion(data):
         op["bodyMD"] = questionObj.bodyMD
         op["position"] = len(quizEnv.questionCompleted) + 1
         tempUnixTimeInMS = time.time_ns() / 1000000
-        op["finishQuestion"] = math.floor(
-            tempUnixTimeInMS + quizEnv.timeLimit * 1000)
+        op["finishQuestion"] = math.floor(tempUnixTimeInMS + quizEnv.timeLimit * 1000)
 
     except LastQuestion as lqe:
         prRed(lqe)
@@ -811,9 +881,7 @@ def finishQuiz(data):
     quizEnv.delete()
     emit("notifyFinishQuiz", to=room)
     prCyan(f"{room} completed")
-    prGreen(
-        f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}"
-    )
+    prGreen(f"attempting auto marking and Quenswer assignment for {quizEnv.roomId}")
     x = 0
     print(len(quiz.quenswerId))
     while len(quiz.quenswerId) == 0:
@@ -821,8 +889,8 @@ def finishQuiz(data):
         x += 1
     print(f"len is now {len(quiz.quenswerId)} it took {x} attempts")
     autoMarking(quiz)
-    prGreen(
-        f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
+    prGreen(f"Auto marking and Quenswer assignment complete for {quizEnv.roomId}")
+
 
 ############################
 # SOCKETIO LOGIC FUNCTIONS #
@@ -885,8 +953,7 @@ def getUsers():
 
         op = []
         for user in UserType.objects(hostOrTest=type):
-            op.append(UserType.objects(id=str(user.pk)
-                                       ).exclude("passwordHash").first())
+            op.append(UserType.objects(id=str(user.pk)).exclude("passwordHash").first())
         return op
 
     def getAllUsers():
@@ -909,23 +976,18 @@ def getUsers():
 def addNewUser():
     requestData = request.get_json()
 
-    # Assert that the right data has been sent
     expectedData = ["email", "firstName", "lastName", "type"]
-
     if not "type" in requestData:
         return ("Insufficent data", 400)
 
-    # Check type is actually valid
     if requestData["type"] != "host" and requestData["type"] != "test":
         return "Invalid data for `type`", 400
 
     if requestData["type"] == "host":
         expectedData.append("password")
 
-    # Sanitise email & transform to lowercase to ensure consistency
     sanitisedEmail = requestData["email"].lower().strip()
 
-    # Finally assert
     if not logic.assertExists(expectedData, requestData):
         return ("Insufficent data", 400)
 
@@ -937,10 +999,12 @@ def addNewUser():
         if attemptGetUser != None:
             raise UserAlreadyExist()
 
-        password = requestData["password"]
-        passwordWiSalt = password + SECRET_KEY
-        passwordHash = hashlib.md5(passwordWiSalt.encode())
-        passwordHash = passwordHash.hexdigest()
+        passwordHash = ph.hash(requestData["password"])
+
+        # password = requestData["password"]
+        # passwordWiSalt = password + SECRET_KEY
+        # passwordHash = hashlib.md5(passwordWiSalt.encode())
+        # passwordHash = passwordHash.hexdigest()
 
         # All good, let's go ahead.
         thisUser = UserType(
@@ -956,9 +1020,11 @@ def addNewUser():
             hostOrTest=requestData["type"],
         )
         thisUser.save()
+        prGreen(
+            f"Succesfully created user {thisUser.firstName} {thisUser.lastName} at {thisUser.email}"
+        )
         return jsonify(thisUser), 200
     except UserDeleted as e:
-
         return "This email is currently assigned to a deleted user", 400
     except UserAlreadyExist as e:
 
@@ -1145,8 +1211,7 @@ def apiQuestionsGet():
 
             op[category.name] = []
             for questionID in category.assocQuestions:
-                op[category.name].append(
-                    Question.objects(id=questionID).first())
+                op[category.name].append(Question.objects(id=questionID).first())
         return op
 
     # Return a list of all questions in a single category
@@ -1373,8 +1438,7 @@ def batchMark():
     returnValue = []
     thisMarker = UserType.objects(id=requestData["userID"]).first()
 
-    thisMarkerName = str("{} {}".format(
-        thisMarker.firstName, thisMarker.lastName))
+    thisMarkerName = str("{} {}".format(thisMarker.firstName, thisMarker.lastName))
 
     try:
         for qid, outcome in requestData["toMark"].items():
@@ -1560,7 +1624,7 @@ def analyticsGetSomething(cid):
         "hardestName": hardestName,
         "hardestAmount": hardestAmount,
         "hardestResponses": hardestResponses,
-        "categoryName": thisCategory.name
+        "categoryName": thisCategory.name,
     }
 
 
@@ -1669,8 +1733,7 @@ def samCustomLogin():
         if data["email"]:
             email = data["email"]
             passwordHash = data["passwordHash"]
-            userObj = UserType.objects(
-                email=email, passwordHash=passwordHash).first()
+            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
             login_user(userObj)
 
             return "login"
