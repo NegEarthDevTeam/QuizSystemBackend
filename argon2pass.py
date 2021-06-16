@@ -16,3 +16,6 @@ except EOFError as e:
     print("Goodbye.")
 except Exception as e:
     print(e)
+
+
+#this is some stuff to generate what the passwords are for the new hash code

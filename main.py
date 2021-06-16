@@ -427,15 +427,18 @@ def loaduser(id):
 login_manager.session_protection = "strong"
 
 
+@app.route("/api/Login", methods=["POST"])
 @app.route("/api/login", methods=["POST"])
 def login():
     requestData = request.get_json()
-
-    if not logic.assertExists(["email", "password"], requestData):
+    print("login")
+    print(f"{ph.hash('abcdef')} is the password hash")
+    print(requestData)
+    if not logic.assertExists(["email", "passwordHash"], requestData):
         return ("Insufficent data", 400)
 
-    thisEmail, thisPassword = requestData["email"], requestData["password"]
-
+    thisEmail, thisPassword = requestData["email"], requestData["passwordHash"]
+    print(f"{ph.hash('abcdef')} is the password hash")
     # Check user exists, but don't notify that user exists if password is wrong!
     thisUser = UserType.objects(email=thisEmail).first()
     if thisUser == None:
@@ -446,6 +449,8 @@ def login():
         # Verify raises an exception if it fails, so it must be OK if it gets to this point.
         if ph.check_needs_rehash(thisUser.passwordHash):
             thisUser.update(passwordHash=ph.hash(thisPassword))
+
+        print(ph.hash(thisPassword))
 
         login_user(thisUser)
 
@@ -1836,5 +1841,3 @@ if __name__ == "__main__":
 # TODO if a question is marked as first and last it will cause the server to not emit any questions
 # TODO add a question sent time to the activeRoom object and then a questionSent time and a QuestionReceived time to the Quenswer Object
 # TODO Undeleting users
-
-
