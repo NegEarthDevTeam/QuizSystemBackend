@@ -1328,14 +1328,18 @@ def putCategories():
     requestData = request.get_json()
     id = requestData["id"]
 
-    category = Categories.objects(id=id).first()
+    categoryObj = Categories.objects(id=id).first()
+
+    for q in Question.objects(category=categoryObj.name):
+        q.category = requestData["name"]
+        q.save()
     try:
-        category.name = requestData["name"]
-        category.save()
+        categoryObj.name = requestData["name"]
+        categoryObj.save()
     except Exception:
         return ("error", 400)
     else:
-        return jsonify(category)
+        return jsonify(categoryObj)
 
 
 @app.route("/api/categories", methods=["DELETE"])
@@ -1520,16 +1524,43 @@ def putMarking():
 def analyticsGetUserQuestionShite(id):
     try:
         thisUser = UserType.objects(id=id).first()
+        catgDictCorr = {}
+        catgDictIncorr = {}
+        for catg in Categories.objects():
+            catgDictCorr[catg.name] = 0
+            catgDictIncorr[catg.name] = 0
+
         if thisUser == None:
-            return "No user assosciated with that ID", 400
+            return "No user associated with that ID", 400
         all, correct, incorrect = [], [], []
         for q in Quenswers.objects(userId=id):
+            questionObj = Question.objects(id=q.questionId).first()
             thisID = str(q.pk)
             all.append(thisID)
             if q.correct == "true":
                 correct.append(thisID)
+                catgDictCorr[questionObj.category] += 1
             elif q.correct == "false":
                 incorrect.append(thisID)
+                catgDictIncorr[questionObj.category] += 1
+
+        mostCorrectCatg = max(catgDictCorr, key=lambda key: catgDictCorr[key])
+        minCorrectCatg = min(catgDictCorr, key=lambda key: catgDictCorr[key])
+
+        totalForCorrCatg = int(catgDictCorr[mostCorrectCatg]) + int(
+            catgDictIncorr[mostCorrectCatg]
+        )
+        totalForIncorrCatg = int(catgDictCorr[minCorrectCatg]) + int(
+            catgDictIncorr[minCorrectCatg]
+        )
+
+        mostCorrectCatgPerc = (
+            int(catgDictCorr[mostCorrectCatg]) * 100 / int(totalForCorrCatg)
+        )
+        minCorrectCatgPerc = 100 - (
+            int(catgDictCorr[minCorrectCatg]) * 100 / int(totalForIncorrCatg)
+        )
+
         return {
             "fullname": f"{thisUser.firstName} {thisUser.lastName}",
             "correctID": correct,
@@ -1537,9 +1568,14 @@ def analyticsGetUserQuestionShite(id):
             "incorrectID": incorrect,
             "incorrectAmount": len(incorrect),
             "allID": all,
+            "bestCatg": mostCorrectCatg,
+            "worstCatg": minCorrectCatg,
+            "bestCatgPercent": mostCorrectCatgPerc,
+            "worstCatgPercent": minCorrectCatgPerc,
         }, 200
     except Exception as e:
         prRed(e)
+        traceback.print_exc()
 
 
 @app.route("/analytics/user/questions", methods=["GET"])
@@ -1717,37 +1753,6 @@ def get():
     yolo = request.args.get("doesnei")
 
     return jsonify(yolo)
-
-
-@app.route("/SAM/api/login", methods=["GET", "POST"])
-def samCustomLogin():
-    if request.method == "GET":
-        return jsonify(
-            {
-                "session": session.get("value", ""),
-                "user": current_user.firstName
-                if current_user.is_authenticated
-                else "anonymous",
-            }
-        )
-    data = request.get_json()
-    if "session" in data:
-
-        session["value"] = data["session"]
-    elif "email" in data:
-        if data["email"]:
-            email = data["email"]
-            passwordHash = data["passwordHash"]
-            userObj = UserType.objects(email=email, passwordHash=passwordHash).first()
-            login_user(userObj)
-
-            return "login"
-        else:
-            logout_user()
-
-            return "logout"
-
-    return "", 204
 
 
 # test route
