@@ -199,6 +199,10 @@ class UserType(db.Document):
         else:
             return False
 
+    @property
+    def fullName(self):
+        return f"{self.firstName} {self.lastName}"
+
 
 class Quizzes(db.Document):
     roomId = db.StringField()
@@ -1714,6 +1718,79 @@ def analyticsCategoriesUserGet():
             elif quenswer.correct == "false":
                 incorrect[str(question.pk)] += 1
     return (jsonify({"correct": correct, "incorrect": incorrect}), 200)
+
+
+# returns data about a group of users when passed a list of Ids, if the list has only user or any of the users don't exist, will return a bad request 400
+@app.route("/api/situanal", methods=["GET"])
+def situanal():
+    requestData = request.get_json()
+    x = 0
+    quenswerList = []
+    users = requestData["users"]
+    correct = []
+    catgDictCorr = {}
+    incorrect = []
+    catgDictIncorr = {}
+    allUsersNames = []
+    for catg in Categories.objects():
+        catgDictCorr[catg.name] = 0
+        catgDictIncorr[catg.name] = 0
+
+    if len(users) == 0:
+        return ("Bad Request", 400)
+    elif len(users) == 1:
+        return ("Must have more than 1 user", 400)
+
+    for user in users:
+        userObj = UserType.objects(id=user).first()
+        allUsersNames.append(userObj.fullName)
+        quenswerList.append([])
+        for quenswer in Quenswers.objects(userId=user):
+            questionObj = Question.objects(id=quenswer.questionId).first()
+            thisID = str(quenswer.pk)
+            if quenswer.correct == "true":
+                correct.append(thisID)
+                catgDictCorr[questionObj.category] += 1
+            elif quenswer.correct == "false":
+                incorrect.append(thisID)
+                catgDictIncorr[questionObj.category] += 1
+
+            quenswerList[x].append(str(quenswer.pk))
+        x += 1
+
+    mostCorrectCatg = max(catgDictCorr, key=lambda key: catgDictCorr[key])
+    minCorrectCatg = min(catgDictCorr, key=lambda key: catgDictCorr[key])
+
+    totalForCorrCatg = int(catgDictCorr[mostCorrectCatg]) + int(
+        catgDictIncorr[mostCorrectCatg]
+    )
+    totalForIncorrCatg = int(catgDictCorr[minCorrectCatg]) + int(
+        catgDictIncorr[minCorrectCatg]
+    )
+
+    mostCorrectCatgPerc = (
+        int(catgDictCorr[mostCorrectCatg]) * 100 / int(totalForCorrCatg)
+    )
+    minCorrectCatgPerc = 100 - (
+        int(catgDictCorr[minCorrectCatg]) * 100 / int(totalForIncorrCatg)
+    )
+
+    return (
+        jsonify(
+            {
+                "fullname": allUsersNames,
+                "correctID": correct,
+                "correctAmount": len(correct),
+                "incorrectID": incorrect,
+                "incorrectAmount": len(incorrect),
+                "bestCatg": mostCorrectCatg,
+                "worstCatg": minCorrectCatg,
+                "bestCatgPercent": mostCorrectCatgPerc,
+                "worstCatgPercent": minCorrectCatgPerc,
+            }
+        ),
+        200,
+    )
 
 
 ############################################
