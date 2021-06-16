@@ -1778,7 +1778,7 @@ def situanal():
     return (
         jsonify(
             {
-                "fullname": allUsersNames,
+                "fullnames": allUsersNames,
                 "correctID": correct,
                 "correctAmount": len(correct),
                 "incorrectID": incorrect,
