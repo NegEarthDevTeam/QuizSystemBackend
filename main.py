@@ -213,6 +213,7 @@ class Quizzes(db.Document):
     timeLimit = db.IntField()
     activeRoomId = db.StringField()
     hostId = db.StringField()
+    hostName = db.StringField()
     quenswerId = db.ListField()
 
     def to_json(self):
@@ -227,6 +228,7 @@ class Quizzes(db.Document):
                 "Time Limit": self.timeLimit,
                 "Active Room Object Id": self.activeRoomId,
                 "Host ID": self.hostId,
+                "Host Name": self.hostName,
                 "Quenswer IDs": self.quenswerId,
             }
         )
@@ -441,34 +443,58 @@ def login():
     print("login")
     print(f"{ph.hash('abcdef')} is the password hash")
     print(requestData)
-    if not logic.assertExists(["email", "passwordHash"], requestData):
+
+    # Need to separately check as we don't want a password when we're logging in test users
+    if not "email" in requestData:
         return ("Insufficent data", 400)
 
-    thisEmail, thisPassword = requestData["email"], requestData["passwordHash"]
-    print(f"{ph.hash('abcdef')} is the password hash")
+    thisEmail = requestData["email"]
+
+    # print(f"{ph.hash('abcdef')} is the password hash")
+
     # Check user exists, but don't notify that user exists if password is wrong!
     thisUser = UserType.objects(email=thisEmail).first()
     if thisUser == None:
         return ("Username and password combination do not exist", 400)
 
-    try:
-        ph.verify(thisUser.passwordHash, thisPassword)
-        # Verify raises an exception if it fails, so it must be OK if it gets to this point.
-        if ph.check_needs_rehash(thisUser.passwordHash):
-            thisUser.update(passwordHash=ph.hash(thisPassword))
-
-        print(ph.hash(thisPassword))
-
+    if thisUser.hostOrTest == "test":
+        # User is simply a host, don't need to check for pass
         login_user(thisUser)
-
-        thisUser.update(lastSignIn=datetime.datetime.now())
         prGreen(f"HTTP {thisUser.firstName} {thisUser.lastName} has logged in")
+        thisUser.update(lastSignIn=datetime.datetime.now())
         return (
             jsonify(
                 {
                     "status": "success",
                     "userID": thisUser.get_id(),
-                    "userName": f"{thisUser.firstName} {thisUser.lastName}",
+                    "userName": thisUser.fullName,
+                }
+            ),
+            200,
+        )
+
+    try:
+        if not "passwordHash" in requestData:
+            return ("Username and password combination do not exist", 400)
+
+        thisPassword = requestData["passwordHash"]
+        ph.verify(thisUser.passwordHash, thisPassword)
+        # Verify raises an exception if it fails, so it must be OK if it gets to this point.
+        if ph.check_needs_rehash(thisUser.passwordHash):
+            thisUser.update(passwordHash=ph.hash(thisPassword))
+
+        # print(ph.hash(thisPassword))
+
+        login_user(thisUser)
+
+        thisUser.update(lastSignIn=datetime.datetime.now())
+        prGreen(f"HTTP {thisUser.fullName} has logged in")
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "userID": thisUser.get_id(),
+                    "userName": thisUser.fullName,
                 }
             ),
             200,
@@ -878,6 +904,9 @@ def finishQuiz(data):
     print(f"User Id {curUserId}")
     quizEnv = ActiveRooms.objects(roomId=room).first()
 
+    # Get host name
+    hostUserObj = UserType.objects(id=quizEnv.hostId).first()
+
     quiz = Quizzes(
         roomId=quizEnv.roomId,
         allConnectedUsers=quizEnv.allConnectedUsers,
@@ -887,6 +916,7 @@ def finishQuiz(data):
         timeLimit=quizEnv.timeLimit,
         activeRoomId=str(quizEnv.pk),
         hostId=quizEnv.hostId,
+        hostName=hostUserObj.fullName,
         quenswerId=[],
     )
     quiz.save()
@@ -1315,13 +1345,17 @@ def deletesQuestions():
 
 
 @app.route("/api/categories", methods=["GET"])
-def getCategories():
+def GetCategories():
     return (jsonify(Categories.objects), 200)
 
 
 @app.route("/api/categories", methods=["POST"])
-def postCategories():
+def AddNewCategory():
     requestData = request.get_json()
+
+    if not "name" in requestData:
+        return ("Insufficent data", 400)
+
     try:
         catg = Categories(name=requestData["name"], tags=[])
         catg.save()
@@ -1332,17 +1366,22 @@ def postCategories():
 
 
 @app.route("/api/categories", methods=["PUT"])
-def putCategories():
+def UpdateCategory():
     requestData = request.get_json()
+
+    if not logic.assertExists(["id", "name"], requestData):
+        return ("Insufficent data", 400)
+
     id = requestData["id"]
+    name = requestData["name"]
 
     categoryObj = Categories.objects(id=id).first()
 
     for q in Question.objects(category=categoryObj.name):
-        q.category = requestData["name"]
+        q.category = name
         q.save()
     try:
-        categoryObj.name = requestData["name"]
+        categoryObj.name = name
         categoryObj.save()
     except Exception:
         return ("error", 400)
@@ -1351,17 +1390,23 @@ def putCategories():
 
 
 @app.route("/categories/tags", methods=["GET"])
-def tagsGet():
+def GetCategoryTags():
     requestData = request.get_json()
-    id = requestData["id"]
+    if not "id" in requestData:
+        return ("Insufficent data", 400)
 
+    id = requestData["id"]
     catObj = Categories.objects(id=id).first()
     return jsonify(catObj.tags)
 
 
 @app.route("/categories/tags", methods=["PUT"])
-def tagsPut():
+def UpdateCategoryTags():
     requestData = request.get_json()
+
+    if not logic.assertExists(["id", "tags"], requestData):
+        return ("Insufficent data", 400)
+
     id = requestData["id"]
     tags = requestData["tags"]
 
@@ -1371,11 +1416,11 @@ def tagsPut():
 
     catgObj.save()
 
-    return (catgObj.to_json())
+    return catgObj.to_json()
 
 
 @app.route("/api/categories", methods=["DELETE"])
-def deletesCategories():
+def DeleteCategory():
     requestData = request.get_json()
     try:
         id = requestData["id"]
@@ -1553,11 +1598,12 @@ def putMarking():
 
 
 @app.route("/api/users/<id>/analytics/questions", methods=["GET"])
-def analyticsGetUserQuestionShite(id):
+def GetUserAnalytics(id):
     try:
         thisUser = UserType.objects(id=id).first()
         catgDictCorr = {}
         catgDictIncorr = {}
+
         for catg in Categories.objects():
             catgDictCorr[catg.name] = 0
             catgDictIncorr[catg.name] = 0
@@ -1565,10 +1611,12 @@ def analyticsGetUserQuestionShite(id):
         if thisUser == None:
             return "No user associated with that ID", 400
         all, correct, incorrect = [], [], []
+
         for q in Quenswers.objects(userId=id):
             questionObj = Question.objects(id=q.questionId).first()
             thisID = str(q.pk)
             all.append(thisID)
+
             if q.correct == "true":
                 correct.append(thisID)
                 catgDictCorr[questionObj.category] += 1
@@ -1577,7 +1625,9 @@ def analyticsGetUserQuestionShite(id):
                 catgDictIncorr[questionObj.category] += 1
 
         mostCorrectCatg = max(catgDictCorr, key=lambda key: catgDictCorr[key])
+        print(f"Most correct category is apparently {mostCorrectCatg}")
         minCorrectCatg = min(catgDictCorr, key=lambda key: catgDictCorr[key])
+        print(f"Least correct category is apparently {mostCorrectCatg}")
 
         totalForCorrCatg = int(catgDictCorr[mostCorrectCatg]) + int(
             catgDictIncorr[mostCorrectCatg]
@@ -1586,12 +1636,27 @@ def analyticsGetUserQuestionShite(id):
             catgDictIncorr[minCorrectCatg]
         )
 
-        mostCorrectCatgPerc = (
-            int(catgDictCorr[mostCorrectCatg]) * 100 / int(totalForCorrCatg)
-        )
-        minCorrectCatgPerc = 100 - (
-            int(catgDictCorr[minCorrectCatg]) * 100 / int(totalForIncorrCatg)
-        )
+        mostCorrectCatgPerc = None
+
+        if int(totalForCorrCatg) == 0:
+            prRed("Avoiding a division by zero for most correct")
+        elif int(catgDictCorr[mostCorrectCatg]) == 0:
+            prRed("This person has somehow not answered a single thing correct..")
+            mostCorrectCatg = None
+        else:
+            mostCorrectCatgPerc = (
+                int(catgDictCorr[mostCorrectCatg]) * 100 / int(totalForCorrCatg)
+            )
+
+        minCorrectCatgPerc = None
+
+        if int(totalForIncorrCatg) == 0:
+            prRed("Avoiding a division by zero for least correct")
+            minCorrectCatg = None
+        else:
+            minCorrectCatgPerc = 100 - (
+                int(catgDictCorr[minCorrectCatg]) * 100 / int(totalForIncorrCatg)
+            )
 
         return {
             "fullname": f"{thisUser.firstName} {thisUser.lastName}",
