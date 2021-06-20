@@ -241,6 +241,7 @@ class Question(db.Document):
     bodyMD = db.StringField()
     videoURL = db.StringField()
     imageURL = db.StringField()
+    tags = db.ListField(default=[])
 
     def to_json(self):
         return jsonify(
@@ -254,15 +255,17 @@ class Question(db.Document):
                 "Body MD": self.bodyMD,
                 "Image URL": self.imageURL,
                 "VideoURL": self.videoURL,
+                "Tags": self.tags,
             }
         )
 
 
 class Categories(db.Document):
     name = db.StringField()
+    tags = db.ListField()
 
     def to_json(self):
-        return jsonify({"_id": str(self.pk), "name": self.name})
+        return jsonify({"_id": str(self.pk), "name": self.name, "tags": self.tags})
 
     @property
     def assocQuestions(self):
@@ -1281,6 +1284,8 @@ def editsQuestion():
             question.videoURL = requestData["videoURL"]
         if "imageURL" in requestData:
             question.imageURL = requestData["imageURL"]
+        if "tags" in requestData:
+            question.tags = requestData["tags"]
         question.save()
     except Exception:
 
@@ -1318,10 +1323,9 @@ def getCategories():
 def postCategories():
     requestData = request.get_json()
     try:
-        catg = Categories(name=requestData["name"])
+        catg = Categories(name=requestData["name"], tags=[])
         catg.save()
     except Exception:
-
         return (jsonify("BAD REQUEST"), 400)
     else:
         return jsonify(catg)
@@ -1344,6 +1348,30 @@ def putCategories():
         return ("error", 400)
     else:
         return jsonify(categoryObj)
+
+
+@app.route("/categories/tags", methods=["GET"])
+def tagsGet():
+    requestData = request.get_json()
+    id = requestData["id"]
+
+    catObj = Categories.objects(id=id).first()
+    return jsonify(catObj.tags)
+
+
+@app.route("/categories/tags", methods=["PUT"])
+def tagsPut():
+    requestData = request.get_json()
+    id = requestData["id"]
+    tags = requestData["tags"]
+
+    catgObj = Categories.objects(id=id).first()
+
+    catgObj.tags = [*catgObj.tags, *tags]
+
+    catgObj.save()
+
+    return (catgObj.to_json())
 
 
 @app.route("/api/categories", methods=["DELETE"])
