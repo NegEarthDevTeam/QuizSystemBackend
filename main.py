@@ -448,8 +448,8 @@ def login():
     if not "email" in requestData:
         return ("Insufficent data", 400)
 
-    thisEmail = requestData["email"]
-
+    capsthisEmail = requestData["email"]
+    thisEmail = capsthisEmail.lower()
     # print(f"{ph.hash('abcdef')} is the password hash")
 
     # Check user exists, but don't notify that user exists if password is wrong!
@@ -1166,7 +1166,7 @@ def createDeeTestUser():
         if "lastName" in requestData:
             testUser.lastName = requestData["lastName"]
         if "email" in requestData:
-            testUser.email = requestData["email"]
+            testUser.email = requestData["email"].lower()
         if "passwordHash" in requestData:
             testUser.passwordHash = requestData["passwordHash"]
         if "hostOrTest" in requestData:
